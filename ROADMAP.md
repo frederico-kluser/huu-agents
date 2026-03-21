@@ -546,7 +546,7 @@ FORMATO: Arquivos encontrados: [paths]. Contagens: [métrica→valor]. Observaç
 
 ---
 
-### Subtask 2.3: Pipeline Planner (orquestração)
+### ~~Subtask 2.3: Pipeline Planner (orquestração)~~ ✅ `branch-1 → main`
 
 **Depende de:** 2.1, 2.2
 **Contexto obrigatório:**
@@ -601,7 +601,7 @@ Você é um engenheiro de pipelines. Implemente o pipeline que conecta Planner a
 
 ---
 
-### Subtask 2.4: Tela de visualização do DAG
+### ~~Subtask 2.4: Tela de visualização do DAG~~ ✅ `branch-3 → main`
 
 **Depende de:** 0.3
 **Contexto obrigatório:**
@@ -717,7 +717,7 @@ const result = await createWorktree("2", "20260321-143000");
 
 ---
 
-### Subtask 3.2: DAG Executor (topological sort + paralelismo)
+### ~~Subtask 3.2: DAG Executor (topological sort + paralelismo)~~ ✅ `branch-2 → main`
 
 **Depende de:** 0.3, 3.1
 **Contexto obrigatório:**
@@ -846,7 +846,7 @@ CAMADA 4 (regras finais — sandwich):
 
 ---
 
-### Subtask 4.2: Worker Runner (Pi Agent SDK)
+### ~~Subtask 4.2: Worker Runner (Pi Agent SDK)~~ ✅ `branch-4 → main`
 
 **Depende de:** 4.1
 **Contexto obrigatório:**
@@ -909,7 +909,7 @@ Você é um engenheiro de integração. Implemente o runner que instancia e exec
 
 ---
 
-### Subtask 4.3: Tela de execução em tempo real
+### ~~Subtask 4.3: Tela de execução em tempo real~~ ✅ `branch-5 → main`
 
 **Depende de:** 0.3
 **Contexto obrigatório:**
@@ -1011,7 +1011,7 @@ Você é um engenheiro de resiliência. Implemente o handler de retry para falha
 
 ---
 
-### Subtask 5.2: Git conflict resolution
+### ~~Subtask 5.2: Git conflict resolution~~ ✅ `branch-7 → main`
 
 **Depende de:** 3.1
 **Contexto obrigatório:**
@@ -1047,7 +1047,7 @@ Você é um engenheiro Git. Implemente a resolução de conflitos de merge entre
 
 ---
 
-### Subtask 5.3: Tela de status final
+### ~~Subtask 5.3: Tela de status final~~ ✅ `branch-6 → main`
 
 **Depende de:** 0.3
 **Contexto obrigatório:**

@@ -165,7 +165,9 @@ export const executeDAG = async (
         throw new Error(result.error ?? 'Worker retornou status failure');
       }
 
-      // Merge subtask branch na branch base da task
+      // Merge subtask branch na branch base da task.
+      // Workers 'partial' com commitHash são mergeados intencionalmente —
+      // mudanças parciais são preservadas e o node é marcado como completed.
       if (result.commitHash) {
         const mergeResult = await merge(
           `task-${taskTimestamp}`,

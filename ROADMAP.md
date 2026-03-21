@@ -14,7 +14,7 @@ Cronograma com subtasks atômicas, mapeamento de contextos `@path` para Claude C
 
 **Objetivo:** Projeto TS/ESM funcional com padrões agent-friendly desde o primeiro arquivo.
 
-### Subtask 0.1: Scaffold do projeto TS/ESM
+### ~~Subtask 0.1: Scaffold do projeto TS/ESM~~ ✅
 
 **Depende de:** nenhuma
 **Contexto obrigatório:**
@@ -69,7 +69,7 @@ Saída: 5 arquivos prontos para `npm run build && node dist/cli.js`
 
 ---
 
-### Subtask 0.2: CLAUDE.md e AGENTS.md do projeto
+### ~~Subtask 0.2: CLAUDE.md e AGENTS.md do projeto~~ ✅ `branch-102 → main`
 
 **Depende de:** 0.1
 **Contexto obrigatório:**
@@ -114,7 +114,7 @@ CLAUDE.md com seções:
 
 ---
 
-### Subtask 0.3: Schemas Zod fundamentais
+### ~~Subtask 0.3: Schemas Zod fundamentais~~ ✅ `branch-103 → main`
 
 **Depende de:** 0.1
 **Contexto obrigatório:**

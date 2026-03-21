@@ -1,7 +1,7 @@
 # Backlog de Features: Pi DAG Task CLI
 
-Análise completa do codebase (34 arquivos, 4.500+ LOC) vs documentação de referência (17 docs).
-**112 gaps identificados em 17 categorias.**
+Análise do codebase (35 arquivos, ~4.500 LOC) vs documentação de referência (17 docs).
+**Atualizado em 2026-03-21.** Bugs críticos de model routing e commit/merge chain resolvidos.
 
 ---
 
@@ -155,16 +155,17 @@ Todas as strings de UI estão hardcoded em português. Sem framework de i18n.
 
 ---
 
-## 11. Callbacks Vazios e TODOs (6 itens)
+## 11. Callbacks Vazios e TODOs (4 itens)
 
 | # | Arquivo:linha | O que falta |
 |---|--------------|-------------|
-| 1 | `app.tsx:133` | `handleRetry` reseta state mas não re-executa nodes falhados realmente |
-| 2 | `app.tsx:137` | `handleQuit` é vazio (comentário "exit chamado via useApp") |
-| 3 | `app.tsx:141` | `handleViewDiff` é vazio (comentário "Futuro: diff via pager") |
-| 4 | `result-screen.tsx:72` | `onViewDiff` invocado sem implementação no parent |
-| 5 | `planner.pipeline.ts:23` | baseUrl não exposto na config |
-| 6 | `explorer-tools.ts:155` | Limite de resultados de search não configurável pelo caller |
+| 1 | `app.tsx` | `handleRetry` re-executa pipeline inteiro, não apenas nodes falhados |
+| 2 | `app.tsx` | `handleViewDiff` é vazio (futuro: diff via pager) |
+| 3 | `result-screen.tsx` | `onViewDiff` invocado sem implementação no parent |
+| 4 | `explorer-tools.ts` | Limite de resultados de search não configurável pelo caller |
+
+~~`handleQuit`~~ ✅ — funciona via `useApp().exit()` dentro do ResultScreen.
+~~`planner.pipeline.ts baseUrl`~~ ✅ — OpenRouter usado como proxy, baseUrl default funcional.
 
 ---
 
@@ -252,26 +253,30 @@ Nenhum arquivo de teste encontrado em todo o projeto.
 1. Testes (0% → 80%)
 2. CLI arguments (--task, --no-interactive para CI)
 3. Limitar concorrência do DAG executor
-4. Retry realmente funcional (handleRetry)
-5. Path traversal fix (symlinks)
+4. Path traversal fix (symlinks)
+
+~~5. Retry realmente funcional~~ ✅ — retry com temperature decay e model fallback implementados.
+~~6. Worker model não aplicado~~ ✅ — modelo parseado e passado ao Pi SDK via getModel().
+~~7. Commit/merge chain quebrada~~ ✅ — runner faz auto-commit, executor faz merge, prompt atualizado.
 
 **P1 (Qualidade de produção):**
-6. Logging estruturado
-7. Prompt caching
-8. Session persistence / checkpointing
-9. Validação de inputs em todas as boundaries
-10. Modelos dinâmicos via OpenRouter /models
+5. Logging estruturado
+6. Prompt caching
+7. Session persistence / checkpointing
+8. Validação de inputs em todas as boundaries
+9. Modelos dinâmicos via OpenRouter /models
 
 **P2 (Valor alto, pode esperar):**
-11. Cost estimation pre-execution
-12. Dry run mode
-13. i18n
-14. Multi-provider support (além de OpenRouter)
-15. Export DAG (Mermaid, issues)
+10. Cost estimation pre-execution
+11. Dry run mode
+12. i18n
+13. Export DAG (Mermaid, issues)
+
+~~Multi-provider support~~ ✅ — Pi SDK suporta OpenRouter como provider confirmado; modelo selecionado pelo usuário é aplicado.
 
 **P3 (Nice to have):**
-16. Dashboard web
-17. Plugin system
-18. Acessibilidade completa
-19. Watch mode
-20. Model benchmarking
+14. Dashboard web
+15. Plugin system
+16. Acessibilidade completa
+17. Watch mode
+18. Model benchmarking

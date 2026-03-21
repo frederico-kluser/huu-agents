@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Box, Text, Spacer } from 'ink';
 import type { DAG, DAGNode } from '../schemas/dag.schema.js';
-import { DAGNodeRow } from '../components/dag-node-row.js';
+import { DagNodeRow } from '../components/dag-node-row.js';
 
 interface DAGViewScreenProps {
   readonly dag: DAG;
@@ -104,7 +104,7 @@ export const DAGViewScreen = ({ dag }: DAGViewScreenProps) => {
       {/* Node list */}
       <Box flexDirection="column" marginTop={1} paddingX={1} gap={0}>
         {nodes.map((node) => (
-          <DAGNodeRow
+          <DagNodeRow
             key={node.id}
             node={node}
             isBlocked={isNodeBlocked(node, nodeMap)}

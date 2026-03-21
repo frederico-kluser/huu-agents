@@ -17,7 +17,8 @@ const STATUS_COLOR: Record<NodeStatus, string> = {
 
 interface DagNodeRowProps {
   readonly node: DAGNode;
-  readonly isActive: boolean;
+  readonly isActive?: boolean;
+  readonly isBlocked?: boolean;
 }
 
 /**
@@ -35,16 +36,16 @@ interface DagNodeRowProps {
  * />
  * ```
  */
-export const DagNodeRow = ({ node, isActive }: DagNodeRowProps) => {
+export const DagNodeRow = ({ node, isActive = false, isBlocked = false }: DagNodeRowProps) => {
   const icon = STATUS_ICON[node.status];
-  const color = STATUS_COLOR[node.status];
+  const displayColor = isBlocked ? 'gray' : STATUS_COLOR[node.status];
 
   return (
     <Box>
-      <Text color={color} bold={isActive}>
+      <Text color={displayColor} bold={isActive} dimColor={isBlocked}>
         {icon} [{node.id}]
       </Text>
-      <Text bold={isActive} color={isActive ? 'cyan' : undefined} wrap="truncate">
+      <Text bold={isActive} color={isActive ? 'cyan' : undefined} dimColor={isBlocked} wrap="truncate">
         {' '}{node.task}
       </Text>
     </Box>

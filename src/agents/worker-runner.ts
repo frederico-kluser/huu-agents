@@ -15,7 +15,7 @@ import { getModel } from '@mariozechner/pi-ai';
 
 import type { DAGNode } from '../schemas/dag.schema.js';
 import { WorkerResultSchema, type WorkerResult } from '../schemas/worker-result.schema.js';
-import { execGit } from '../git/git-wrapper.js';
+import { commit, execGit } from '../git/git-wrapper.js';
 
 /** Tipos de evento de progresso emitidos durante execucao do worker */
 export type WorkerProgressType = 'text' | 'tool_start' | 'tool_end' | 'error' | 'done';
@@ -135,13 +135,25 @@ export async function runWorker(
   const status = resolveStatus(timedOut, agentError, filesModified);
   const errorMsg = timedOut ? `Timeout após ${timeoutMs}ms` : agentError;
 
-  emit('done', `Status: ${status}, ${filesModified.length} arquivo(s) modificado(s)`);
+  // Commit automático das mudanças do worker — o prompt não pede mais git add/commit
+  let commitHash: string | null = null;
+  if (filesModified.length > 0) {
+    const commitResult = await commit(
+      worktreePath,
+      `feat(dag): ${node.task.slice(0, 72)}`,
+    );
+    if (commitResult.ok) {
+      commitHash = commitResult.value;
+    }
+  }
+
+  emit('done', `Status: ${status}, ${filesModified.length} arquivo(s), commit: ${commitHash?.slice(0, 7) ?? 'nenhum'}`);
 
   return WorkerResultSchema.parse({
     nodeId: node.id,
     status,
     filesModified,
-    commitHash: null,
+    commitHash,
     error: errorMsg,
   });
 }

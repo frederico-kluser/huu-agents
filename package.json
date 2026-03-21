@@ -23,7 +23,8 @@
     "ink-select-input": "^6.0.0",
     "ink-text-input": "^6.0.0",
     "react": "^19.0.0",
-    "zod": "^3.24.0"
+    "zod": "^3.24.0",
+    "@mariozechner/pi-coding-agent": "^0.60.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

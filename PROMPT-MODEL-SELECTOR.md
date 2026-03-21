@@ -66,31 +66,65 @@ export const formatContext = (k: number): string =>
 </output_schema>
 
 <data>
-Os 18 modelos a incluir, com dados reais de março 2026:
+Os 18 modelos com dados verificados da pesquisa LLM Cost-Performance Matrix (Março 2026).
+Velocidades usam valor médio do range reportado. SWE-Bench usa valor confirmado (não auto-reportado).
 
-// --- TIER: PLANNER (reasoning pesado) ---
+// --- TIER: PLANNER (reasoning pesado — decomposição arquitetural, planning) ---
 { id: 'anthropic/claude-opus-4-6', name: 'Claude Opus 4.6', provider: 'Anthropic', tier: 'planner', speed: 45, contextWindow: 1000, inputPrice: 5.00, outputPrice: 25.00, cachePrice: 0.50, sweBench: 80.8, perfCostRatio: 11 },
+// Melhor SWE-rebench (51.7%), raciocínio abstrato (ARC-AGI-2: 68.8%), output max 128K, adaptive thinking
+
 { id: 'openai/gpt-5.4', name: 'GPT-5.4', provider: 'OpenAI', tier: 'planner', speed: 55, contextWindow: 1050, inputPrice: 2.50, outputPrice: 15.00, cachePrice: 0.25, sweBench: 80.0, perfCostRatio: 19 },
+// Maior contexto (1.05M), computer use nativo, Tool Search (-47% tokens), SWE-Bench Pro 57.7%
+
 { id: 'google/gemini-3.1-pro', name: 'Gemini 3.1 Pro', provider: 'Google', tier: 'planner', speed: 50, contextWindow: 1000, inputPrice: 2.00, outputPrice: 12.00, cachePrice: 0.20, sweBench: 80.6, perfCostRatio: 24 },
+// #1 Terminal-Bench (78.4%), LiveCodeBench Elo 2887, GPQA Diamond 94.3%, multimodal nativo, preview
+
 { id: 'openai/gpt-5.3-codex', name: 'GPT-5.3 Codex', provider: 'OpenAI', tier: 'planner', speed: 68, contextWindow: 400, inputPrice: 1.75, outputPrice: 14.00, cachePrice: 0.175, sweBench: null, perfCostRatio: 0 },
+// Terminal-Bench 77.3%, SWE-Bench Pro 56.8%, async tasks em worktrees, interactive steering
 
-// --- TIER: BOTH (planner ou worker) ---
+// --- TIER: BOTH (serve como planner ou worker) ---
 { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'Anthropic', tier: 'both', speed: 62, contextWindow: 1000, inputPrice: 3.00, outputPrice: 15.00, cachePrice: 0.30, sweBench: 79.6, perfCostRatio: 18 },
-{ id: 'minimax/minimax-m2.5', name: 'MiniMax M2.5', provider: 'MiniMax', tier: 'both', speed: 50, contextWindow: 196, inputPrice: 0.15, outputPrice: 1.20, cachePrice: 0.015, sweBench: 80.2, perfCostRatio: 242 },
-{ id: 'moonshot/kimi-k2.5', name: 'Kimi K2.5', provider: 'Moonshot', tier: 'both', speed: 80, contextWindow: 256, inputPrice: 0.60, outputPrice: 2.50, cachePrice: 0.10, sweBench: 76.8, perfCostRatio: 99 },
-{ id: 'deepseek/deepseek-chat', name: 'DeepSeek V3.2', provider: 'DeepSeek', tier: 'both', speed: 40, contextWindow: 128, inputPrice: 0.28, outputPrice: 0.42, cachePrice: 0.028, sweBench: 70.4, perfCostRatio: 396 },
-{ id: 'anthropic/claude-haiku-4-5', name: 'Claude Haiku 4.5', provider: 'Anthropic', tier: 'both', speed: 80, contextWindow: 200, inputPrice: 1.00, outputPrice: 5.00, cachePrice: 0.10, sweBench: 73.3, perfCostRatio: 50 },
+// Workhorse 80-90% dos workloads, preferido 59% sobre Opus no Claude Code, Elo GDPval-AA 1633
 
-// --- TIER: WORKER (execução rápida) ---
-{ id: 'google/gemini-3-flash', name: 'Gemini 3 Flash', provider: 'Google', tier: 'worker', speed: 143, contextWindow: 1000, inputPrice: 0.50, outputPrice: 3.00, cachePrice: 0.05, sweBench: 78.0, perfCostRatio: 91 },
-{ id: 'google/gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite', provider: 'Google', tier: 'worker', speed: 363, contextWindow: 1000, inputPrice: 0.25, outputPrice: 1.50, cachePrice: 0.025, sweBench: null, perfCostRatio: 168 },
+{ id: 'minimax/minimax-m2.5', name: 'MiniMax M2.5', provider: 'MiniMax', tier: 'both', speed: 50, contextWindow: 196, inputPrice: 0.15, outputPrice: 1.20, cachePrice: 0.015, sweBench: 80.2, perfCostRatio: 242 },
+// SWEET SPOT: 80.2% SWE-Bench a 1/20 do Opus, SWE-Bench Pro 55.4%, MoE 230B/10B ativo, MIT mod
+
+{ id: 'moonshot/kimi-k2.5', name: 'Kimi K2.5', provider: 'Moonshot', tier: 'both', speed: 80, contextWindow: 256, inputPrice: 0.60, outputPrice: 2.50, cachePrice: 0.10, sweBench: 76.8, perfCostRatio: 99 },
+// HumanEval 99% (#1), Agent Swarm (100 sub-agents), 1.04T params, input barato para review
+
+{ id: 'deepseek/deepseek-chat', name: 'DeepSeek V3.2', provider: 'DeepSeek', tier: 'both', speed: 27, contextWindow: 128, inputPrice: 0.28, outputPrice: 0.42, cachePrice: 0.028, sweBench: 70.4, perfCostRatio: 396 },
+// Output MAIS BARATO ($0.42/M = 60x menos que Opus), 685B/37B MoE, lento (27 tok/s), 128K ctx
+
+{ id: 'anthropic/claude-haiku-4-5', name: 'Claude Haiku 4.5', provider: 'Anthropic', tier: 'both', speed: 116, contextWindow: 200, inputPrice: 1.00, outputPrice: 5.00, cachePrice: 0.10, sweBench: 73.3, perfCostRatio: 50 },
+// 90% performance Sonnet 4.5, 106-126 tok/s, extended thinking, 200K ctx (não 1M), batch $0.50/$2.50
+
+// --- TIER: WORKER (execução rápida — implementação, testes, refactoring) ---
+{ id: 'google/gemini-3-flash', name: 'Gemini 3 Flash', provider: 'Google', tier: 'worker', speed: 164, contextWindow: 1000, inputPrice: 0.50, outputPrice: 3.00, cachePrice: 0.05, sweBench: 78.0, perfCostRatio: 91 },
+// Free tier disponível, 1M ctx, SWE-rebench 46.7%, 30% menos tokens que 2.5 Pro
+
+{ id: 'google/gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite', provider: 'Google', tier: 'worker', speed: 300, contextWindow: 1000, inputPrice: 0.25, outputPrice: 1.50, cachePrice: 0.025, sweBench: null, perfCostRatio: 168 },
+// MAIS RÁPIDO (249-363 tok/s), 1M ctx a $0.25, destilado do Pro, LiveCodeBench 72%, free tier
+
 { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google', tier: 'worker', speed: 110, contextWindow: 1000, inputPrice: 0.30, outputPrice: 2.50, cachePrice: 0.03, sweBench: 64.0, perfCostRatio: 93 },
+// GA (estável em produção), free tier com Google Search grounding, sendo substituído pelo 3 Flash
+
 { id: 'stepfun/step-3.5-flash', name: 'Step 3.5 Flash', provider: 'StepFun', tier: 'worker', speed: 230, contextWindow: 262, inputPrice: 0.10, outputPrice: 0.30, cachePrice: 0.02, sweBench: 74.4, perfCostRatio: 709 },
+// 83x mais barato que Opus em output, AIME 2025 97.3%, Apache 2.0, roda em Mac Studio M4 Max
+
 { id: 'xiaomi/mimo-v2-flash', name: 'MiMo-V2-Flash', provider: 'Xiaomi', tier: 'worker', speed: 135, contextWindow: 256, inputPrice: 0.10, outputPrice: 0.30, cachePrice: 0, sweBench: 73.4, perfCostRatio: 757 },
+// MELHOR P/C RATIO (757), SWE-Bench Multilingual 71.7% (#1 open-source), 309B/15B MoE
+
 { id: 'mistral/devstral-small-2', name: 'Devstral Small 2', provider: 'Mistral', tier: 'worker', speed: 198, contextWindow: 256, inputPrice: 0.10, outputPrice: 0.30, cachePrice: 0, sweBench: 68.0, perfCostRatio: 702 },
+// Apache 2.0 COMPLETA, roda em RTX 4090 / Mac 32GB / CPU-only, 24B, zero custo API possível
+
 { id: 'mistral/devstral-2', name: 'Devstral 2', provider: 'Mistral', tier: 'worker', speed: 60, contextWindow: 256, inputPrice: 0.40, outputPrice: 2.00, cachePrice: 0, sweBench: 72.2, perfCostRatio: 122 },
+// GRÁTIS na Mistral API (promoção), 123B denso, MIT modificada (>$20M/mês precisa licença), Vibe CLI
+
 { id: 'xai/grok-code-fast-1', name: 'Grok Code Fast 1', provider: 'xAI', tier: 'worker', speed: 155, contextWindow: 256, inputPrice: 0.20, outputPrice: 1.50, cachePrice: 0.02, sweBench: 64.2, perfCostRatio: 156 },
+// SWE-Bench controverso (57.6-70.8% depende do scaffold), 201 tok/s medidos, #1 volume OpenRouter
+
 { id: 'alibaba/qwen3-coder-480b', name: 'Qwen3-Coder 480B', provider: 'Alibaba', tier: 'worker', speed: 115, contextWindow: 262, inputPrice: 0.22, outputPrice: 1.00, cachePrice: 0, sweBench: 55.0, perfCostRatio: 184 },
+// Apache 2.0, pass@5 64.6% (SWE-rebench), 480B/35B MoE, grátis no OpenRouter (rate limited)
 </data>
 ```
 
@@ -316,21 +350,69 @@ Task 1 (catálogo 18 modelos) ──→ Task 2 (tabela filtrável) ──→ Tas
 
 ## Dados de referência (Cost-Performance Matrix, Março 2026)
 
-### Insights para decisão de defaults
+### Defaults recomendados
 
-**Default Planner recomendado:** `google/gemini-3.1-pro` — 80.6% SWE-Bench, #1 Terminal-Bench, $2/$12 (60% mais barato que Opus, mesma performance).
+**Default Planner:** `google/gemini-3.1-pro` — 80.6% SWE-Bench, #1 Terminal-Bench (78.4%), $2/$12 (60% mais barato que Opus).
 
-**Default Worker recomendado:** `xiaomi/mimo-v2-flash` ou `stepfun/step-3.5-flash` — 73-74% SWE-Bench a $0.10/$0.30 (75x mais barato que Opus). MiMo tem melhor P/C ratio (757), Step é mais rápido (230 tok/s).
+**Default Worker:** `xiaomi/mimo-v2-flash` — 73.4% SWE-Bench, P/C ratio 757 (melhor do catálogo), $0.10/$0.30. Alternativa mais rápida: `stepfun/step-3.5-flash` a 230 tok/s.
 
-**Sweet spot universal:** `minimax/minimax-m2.5` — 80.2% SWE-Bench a $0.15/$1.20. Serve como planner E worker com performance frontier a custo budget.
+**Sweet spot universal:** `minimax/minimax-m2.5` — 80.2% SWE-Bench a $0.15/$1.20. Performance frontier a custo budget. Serve como planner E worker.
+
+### Tabela completa de benchmarks (para referência na UI)
+
+| Modelo | SWE-Verified | SWE-rebench | SWE-Pro | Terminal-Bench | HumanEval | Tool Calling |
+|--------|:-----------:|:-----------:|:-------:|:-------------:|:---------:|:------------:|
+| Claude Opus 4.6 | 80.8% | 51.7% | 57.5% | 74.7% | 95.0% | 5/5 |
+| Claude Sonnet 4.6 | 79.6% | — | — | 59.1% | 92.1% | 5/5 |
+| Claude Haiku 4.5 | 73.3% | — | 39.5% | — | — | 5/5 |
+| GPT-5.4 | 80.0% | — | 57.7% | 75.0% | 95.0% | 4.5/5 |
+| GPT-5.3 Codex | — | — | 56.8% | 77.3% | — | 4.5/5 |
+| Gemini 3.1 Pro | 80.6% | 46.7% | 43.3% | 78.4% | 93.0% | 4/5 |
+| Gemini 3 Flash | 78.0% | 46.7% | 34.6% | — | — | 4/5 |
+| Gemini 3.1 Flash Lite | — | — | — | — | — | 3/5 |
+| Gemini 2.5 Flash | 64.0% | — | — | — | — | 4/5 |
+| MiniMax M2.5 | 80.2% | 39.6% | 55.4% | 42.2% | 89.6% | 4/5 |
+| Kimi K2.5 | 76.8% | 37.9% | — | 50.8% | 99.0% | 4/5 |
+| Step 3.5 Flash | 74.4% | — | — | 51.0% | 81.1% | 3.5/5 |
+| MiMo-V2-Flash | 73.4% | — | — | 38.5% | 84.8% | 3.5/5 |
+| DeepSeek V3.2 | 70.4% | 37.5% | 15.6% | 39.6% | — | 3/5 |
+| Devstral 2 | 72.2% | 37.5% | — | 43.8% | — | 4/5 |
+| Devstral Small 2 | 68.0% | 32.1% | — | 40.0% | — | 3.5/5 |
+| Grok Code Fast 1 | 64.2% | 29.0% | — | — | — | 3.5/5 |
+| Qwen3-Coder 480B | 55.0% | 31.7% | 38.7% | — | — | 3.5/5 |
+
+### Alocação recomendada por agente (11 agentes HUU)
+
+| Agente | Modelo recomendado | Blended $/M | Justificativa |
+|--------|-------------------|:-----------:|---------------|
+| orchestrator | Gemini 3.1 Pro | $4.24 | #1 Terminal-Bench, raciocínio arquitetural |
+| planner | Claude Opus 4.6 | $9.11 | Melhor raciocínio abstrato (ARC-AGI-2: 68.8%) |
+| builder | MiniMax M2.5 | $0.41 | 80.2% SWE a 1/20 do Opus |
+| tester | Gemini 3.1 Pro | $4.24 | LiveCodeBench Elo 2887 |
+| reviewer | Kimi K2.5 | $0.96 | 99% HumanEval, input barato |
+| researcher | Gemini 3 Flash | $1.06 | 1M ctx, Search grounding |
+| merger | GPT-5.4 | $5.31 | Computer use + Terminal-Bench |
+| refactorer | MiniMax M2.5 | $0.41 | Output-heavy a custo mínimo |
+| doc-writer | Claude Haiku 4.5 | $1.82 | Prosa clara, 116 tok/s |
+| debugger | Claude Sonnet 4.6 | $5.47 | Raciocínio profundo + tool use |
+| context-curator | Gemini 3.1 Flash Lite | $0.53 | 1M ctx + 300 tok/s |
 
 ### Preços com cache (90% desconto típico)
 
 | Modelo | Input | Cached | Economia |
-|--------|-------|--------|----------|
+|--------|------:|-------:|:--------:|
 | Claude Opus 4.6 | $5.00 | $0.50 | 90% |
 | GPT-5.4 | $2.50 | $0.25 | 90% |
 | Gemini 3.1 Pro | $2.00 | $0.20 | 90% |
 | MiniMax M2.5 | $0.15 | $0.015 | 90% |
 | DeepSeek V3.2 | $0.28 | $0.028 | 90% |
 | Step 3.5 Flash | $0.10 | $0.02 | 80% |
+| Kimi K2.5 | $0.60 | $0.10 | 83% |
+
+### Custo estimado por feature (single pass, 11 agentes)
+
+| Total input | Total output | Custo base | Com cache | Com batch |
+|:-----------:|:------------:|:----------:|:---------:|:---------:|
+| ~675K tokens | ~194K tokens | ~$1.53 | ~$1.10 | ~$0.90 |
+
+Real-world com retries: multiplique por 2-5x = **$3-8 por feature média**.

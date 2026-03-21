@@ -967,7 +967,7 @@ Você é um desenvolvedor React/Ink especializado em dashboards real-time. Const
 
 **Objetivo:** Resiliência em falhas de LLM, Git e rede.
 
-### Subtask 5.1: Retry com temperature decay
+### ~~Subtask 5.1: Retry com temperature decay~~ ✅
 
 **Depende de:** 4.2
 **Contexto obrigatório:**

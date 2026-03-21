@@ -9,9 +9,9 @@
 import {
   AuthStorage,
   createAgentSession,
-  ModelRegistry,
   SessionManager,
 } from '@mariozechner/pi-coding-agent';
+import { getModel } from '@mariozechner/pi-ai';
 
 import type { DAGNode } from '../schemas/dag.schema.js';
 import { WorkerResultSchema, type WorkerResult } from '../schemas/worker-result.schema.js';
@@ -146,22 +146,35 @@ export async function runWorker(
   });
 }
 
+/** Parseia modelo no formato "provider/modelId" em partes separadas */
+function parseModelId(model: string): { provider: string; modelId: string } {
+  const slash = model.indexOf('/');
+  if (slash <= 0) return { provider: 'anthropic', modelId: model };
+  return { provider: model.slice(0, slash), modelId: model.slice(slash + 1) };
+}
+
 /**
- * Cria session Pi SDK com inMemory SessionManager e cwd no worktree.
- * Configura API key via runtime override (sem persistir em disco).
+ * Cria session Pi SDK com modelo selecionado pelo usuário.
+ * Parseia config.model ("provider/modelId"), resolve via getModel(),
+ * e configura auth com o provider correto.
+ *
+ * @throws {WorkerRunnerError} Modelo inválido ou provider não suportado
  */
 async function createPiSession(
   worktreePath: string,
   config: WorkerRunnerConfig,
 ): Promise<{ session: PiSession }> {
+  const { provider, modelId } = parseModelId(config.model);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- provider vem do config do usuário, validado em runtime pelo Pi SDK
+  const piModel = getModel(provider as never, modelId);
+
   const authStorage = AuthStorage.create();
-  const provider = config.provider ?? 'anthropic';
   authStorage.setRuntimeApiKey(provider, config.apiKey);
 
   return createAgentSession({
+    model: piModel,
     sessionManager: SessionManager.inMemory(),
     authStorage,
-    modelRegistry: new ModelRegistry(authStorage),
     cwd: worktreePath,
   });
 }

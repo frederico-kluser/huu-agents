@@ -1,63 +1,52 @@
 import { Box, Text } from 'ink';
-import type { DAGNode } from '../schemas/dag.schema.js';
+import type { DAGNode, NodeStatus } from '../schemas/dag.schema.js';
 
-interface DAGNodeRowProps {
-  readonly node: DAGNode;
-  readonly isBlocked: boolean;
-}
-
-const STATUS_ICON: Record<DAGNode['status'], string> = {
-  pending: '\u25CB',  // ○
-  running: '\u25C9',  // ◉
-  done: '\u2714',     // ✔
-  failed: '\u2716',   // ✖
+const STATUS_ICON: Record<NodeStatus, string> = {
+  pending: '\u25CB',
+  running: '\u27F3',
+  done: '\u2713',
+  failed: '\u2717',
 };
 
-const STATUS_COLOR: Record<DAGNode['status'], string> = {
+const STATUS_COLOR: Record<NodeStatus, string> = {
   pending: 'gray',
   running: 'yellow',
   done: 'green',
   failed: 'red',
 };
 
+interface DagNodeRowProps {
+  readonly node: DAGNode;
+  readonly isActive: boolean;
+}
+
 /**
- * Renderiza uma linha do DAG com icone de status, descricao e dependencias.
- * Nodes bloqueados (dependencias nao concluidas) aparecem com dimColor.
+ * Renderiza uma linha do DAG com icone de status colorido.
+ * O no ativo (worker em execucao) recebe destaque visual com cor cyan.
+ *
+ * @param props.node - No do DAG com status atual
+ * @param props.isActive - Se este e o no com worker ativo
  *
  * @example
  * ```tsx
- * <DAGNodeRow
- *   node={{ id: "1", task: "Converter format.js", dependencies: [], status: "running", files: [] }}
- *   isBlocked={false}
+ * <DagNodeRow
+ *   node={{ id: "1", task: "format.js", dependencies: [], status: "done", files: [] }}
+ *   isActive={false}
  * />
  * ```
  */
-export const DAGNodeRow = ({ node, isBlocked }: DAGNodeRowProps) => {
-  const color = STATUS_COLOR[node.status];
+export const DagNodeRow = ({ node, isActive }: DagNodeRowProps) => {
   const icon = STATUS_ICON[node.status];
-  const dim = isBlocked && node.status === 'pending';
+  const color = STATUS_COLOR[node.status];
 
   return (
-    <Box flexDirection="column">
-      <Box gap={1}>
-        <Text color={color}>{icon}</Text>
-        <Text dimColor={dim} color={dim ? undefined : color}>
-          [{node.id}]
-        </Text>
-        <Text dimColor={dim} wrap="truncate">
-          {node.task}
-        </Text>
-        {node.status === 'done' && node.files.length > 0 && (
-          <Text dimColor>({node.files.length} arquivos)</Text>
-        )}
-      </Box>
-      {node.dependencies.length > 0 && (
-        <Box marginLeft={3}>
-          <Text dimColor>
-            {'\u2514\u2500'} depende de: [{node.dependencies.join(', ')}]
-          </Text>
-        </Box>
-      )}
+    <Box>
+      <Text color={color} bold={isActive}>
+        {icon} [{node.id}]
+      </Text>
+      <Text bold={isActive} color={isActive ? 'cyan' : undefined} wrap="truncate">
+        {' '}{node.task}
+      </Text>
     </Box>
   );
 };

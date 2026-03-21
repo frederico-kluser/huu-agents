@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import { ConfigScreen } from './screens/config-screen.js';
 import { ContextScreen } from './screens/context-screen.js';
 import { TaskScreen } from './screens/task-screen.js';
+import { ExecutionScreen } from './screens/execution-screen.js';
 import { useConfig } from './hooks/use-config.js';
 import type { Config } from './schemas/config.schema.js';
 
@@ -13,12 +14,14 @@ interface PipelineState {
   readonly config: Config | null;
   readonly contextFiles: readonly string[];
   readonly macroTask: string;
+  readonly startTime: number;
 }
 
 const INITIAL_STATE: PipelineState = {
   config: null,
   contextFiles: [],
   macroTask: '',
+  startTime: 0,
 };
 
 /**
@@ -67,7 +70,7 @@ export const App = () => {
   }, []);
 
   const handleTaskSubmit = useCallback((task: string) => {
-    setPipeline((prev) => ({ ...prev, macroTask: task }));
+    setPipeline((prev) => ({ ...prev, macroTask: task, startTime: Date.now() }));
     setScreen('executing');
   }, []);
 
@@ -108,19 +111,13 @@ export const App = () => {
 
   // screen === 'executing'
   return (
-    <Box flexDirection="column" padding={1}>
-      <Box borderStyle="round" borderColor="yellow" paddingX={2} paddingY={1}>
-        <Text bold color="yellow">Pi DAG CLI — Executando</Text>
-      </Box>
-      <Box marginTop={1} flexDirection="column">
-        <Text>Task: <Text bold>{pipeline.macroTask}</Text></Text>
-        <Text>Contexto: <Text bold>{pipeline.contextFiles.length}</Text> arquivos</Text>
-        <Text>Planner: <Text color="green">{pipeline.config?.plannerModel}</Text></Text>
-        <Text>Worker: <Text color="green">{pipeline.config?.workerModel}</Text></Text>
-      </Box>
-      <Box marginTop={1}>
-        <Text dimColor>Planner pipeline sera implementado na Fase 2...</Text>
-      </Box>
-    </Box>
+    <ExecutionScreen
+      macroTask={pipeline.macroTask}
+      dag={null}
+      logs={[]}
+      results={[]}
+      activeNodeId={null}
+      startTime={pipeline.startTime}
+    />
   );
 };

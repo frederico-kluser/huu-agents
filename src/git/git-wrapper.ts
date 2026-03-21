@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -214,15 +214,23 @@ export const merge = async (
   if (!mergeResult.ok) {
     // Abortar merge parcial e limpar worktree
     await execGit(['merge', '--abort'], tmpDir);
-    await execGit(['worktree', 'remove', tmpDir, '--force']);
+    const cleanupRes = await execGit(['worktree', 'remove', tmpDir, '--force']);
+    if (!cleanupRes.ok) {
+      await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      await execGit(['worktree', 'prune']);
+    }
     return mergeResult;
   }
 
   // Capturar hash do merge commit
   const hashResult = await execGit(['rev-parse', 'HEAD'], tmpDir);
 
-  // Sempre limpar o worktree temporário
-  await execGit(['worktree', 'remove', tmpDir, '--force']);
+  // Sempre limpar o worktree temporário (com fallback)
+  const removeRes = await execGit(['worktree', 'remove', tmpDir, '--force']);
+  if (!removeRes.ok) {
+    await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    await execGit(['worktree', 'prune']);
+  }
 
   if (!hashResult.ok) return hashResult;
 

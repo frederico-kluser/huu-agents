@@ -155,9 +155,11 @@ export async function runPipeline(
       };
 
       const outcome = await retryWorker(
-        async (_model, _temperature) => {
+        async (model, temperature) => {
           return runWorker(node, worktreePath, systemPrompt, {
+            model,
             apiKey: config.openrouterApiKey,
+            temperature,
             onProgress: onWorkerProgress,
           });
         },

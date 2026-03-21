@@ -20,6 +20,14 @@ export {
   merge,
 } from './git-wrapper.js';
 
+export type {
+  ConflictError,
+  ConflictLog,
+  MergeStrategy,
+  ResolvedMergeResult,
+} from './conflict-resolver.js';
+export { mergeWithResolution } from './conflict-resolver.js';
+
 export {
   cleanupAll,
   createWorktree,

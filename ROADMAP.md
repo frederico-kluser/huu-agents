@@ -416,7 +416,7 @@ Você é um desenvolvedor React/Ink. Construa o componente App que orquestra a n
 
 **Objetivo:** Planner decompõe macro-task em DAG JSON validado, com exploração ReAct quando contexto insuficiente.
 
-### Subtask 2.1: System prompt do Planner (Arquiteto)
+### ~~Subtask 2.1: System prompt do Planner (Arquiteto)~~ ✅ `branch-1 → main`
 
 **Depende de:** 0.3
 **Contexto obrigatório:**
@@ -485,7 +485,7 @@ O Planner DEVE embutir em cada node.task para guiar Workers:
 
 ---
 
-### Subtask 2.2: Sub-agente ReAct Explorer
+### ~~Subtask 2.2: Sub-agente ReAct Explorer~~ ✅ `branch-2 → main`
 
 **Depende de:** 0.1
 **Contexto obrigatório:**
@@ -656,7 +656,7 @@ Você é um desenvolvedor React/Ink especializado em visualização. Renderize o
 
 **Objetivo:** Automação confiável de branches e worktrees via child_process, sem tocar no working tree do usuário.
 
-### Subtask 3.1: Git Wrapper
+### ~~Subtask 3.1: Git Wrapper~~ ✅ `branch-3 → main`
 
 **Depende de:** 0.1
 **Contexto obrigatório:**
@@ -771,7 +771,7 @@ Você é um engenheiro de sistemas distribuídos. Implemente o executor de DAG c
 
 **Objetivo:** Workers executam subtasks em worktrees isoladas com system prompts ricos e padrões agent-friendly.
 
-### Subtask 4.1: System prompt do Worker
+### ~~Subtask 4.1: System prompt do Worker~~ ✅ `branch-4 → main`
 
 **Depende de:** 0.3
 **Contexto obrigatório:**

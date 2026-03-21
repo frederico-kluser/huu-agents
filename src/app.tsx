@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { ConfigScreen } from './screens/config-screen.js';
 import { ContextScreen } from './screens/context-screen.js';
@@ -6,6 +6,7 @@ import { TaskScreen } from './screens/task-screen.js';
 import { ExecutionScreen } from './screens/execution-screen.js';
 import { ResultScreen } from './screens/result-screen.js';
 import { useConfig } from './hooks/use-config.js';
+import { runPipeline, type PipelineProgress } from './pipeline/orchestrator.js';
 import type { Config } from './schemas/config.schema.js';
 import type { DAGNode } from './schemas/dag.schema.js';
 import type { WorkerResult } from './schemas/worker-result.schema.js';
@@ -27,6 +28,7 @@ interface PipelineState {
   readonly macroTask: string;
   readonly startTime: number;
   readonly result: PipelineResult | null;
+  readonly progress: PipelineProgress | null;
 }
 
 const INITIAL_STATE: PipelineState = {
@@ -35,15 +37,15 @@ const INITIAL_STATE: PipelineState = {
   macroTask: '',
   startTime: 0,
   result: null,
+  progress: null,
 };
 
 /**
  * Componente raiz do Pi DAG CLI.
- * Router de telas baseado em state machine simples:
+ * Router de telas baseado em state machine:
  * loading → config → context → task → executing → result.
  *
- * Cada tela passa dados via callback para a próxima,
- * acumulando no PipelineState imutável.
+ * Na tela 'executing', invoca o pipeline real (planner → dag-executor → workers).
  *
  * @example
  * ```tsx
@@ -59,15 +61,12 @@ export const App = () => {
   );
   const [pipeline, setPipeline] = useState<PipelineState>(INITIAL_STATE);
 
-  // Se useConfig terminou de carregar e já tem config, pular para context
+  // Transição automática após useConfig resolver
   if (configState.status === 'loaded' && screen === 'loading') {
     setScreen('context');
     setPipeline((prev) => ({ ...prev, config: configState.config }));
   }
-  if (configState.status === 'missing' && screen === 'loading') {
-    setScreen('config');
-  }
-  if (configState.status === 'error' && screen === 'loading') {
+  if ((configState.status === 'missing' || configState.status === 'error') && screen === 'loading') {
     setScreen('config');
   }
 
@@ -87,7 +86,52 @@ export const App = () => {
     setScreen('executing');
   }, []);
 
+  // Executa o pipeline real quando entra na tela 'executing'
+  useEffect(() => {
+    if (screen !== 'executing' || !pipeline.config || !pipeline.macroTask) return;
+
+    let cancelled = false;
+
+    const run = async () => {
+      const result = await runPipeline({
+        config: pipeline.config!,
+        macroTask: pipeline.macroTask,
+        contextFiles: pipeline.contextFiles,
+        rootPath: process.cwd(),
+        onProgress: (progress) => {
+          if (cancelled) return;
+          setPipeline((prev) => ({ ...prev, progress }));
+        },
+      });
+
+      if (cancelled) return;
+
+      // Se Planner pediu clarify, voltar para task screen
+      if ('type' in result && result.type === 'clarify') {
+        setScreen('task');
+        return;
+      }
+
+      // Pipeline concluído — ir para result screen
+      const progress = result as PipelineProgress;
+      setPipeline((prev) => ({
+        ...prev,
+        result: {
+          nodes: progress.dag?.nodes ?? [],
+          results: progress.results,
+          branch: progress.branch,
+          diffStat: progress.diffStat,
+        },
+      }));
+      setScreen('result');
+    };
+
+    void run();
+    return () => { cancelled = true; };
+  }, [screen, pipeline.config, pipeline.macroTask, pipeline.contextFiles]);
+
   const handleRetry = useCallback((_failedNodeIds: readonly string[]) => {
+    setPipeline((prev) => ({ ...prev, startTime: Date.now(), progress: null }));
     setScreen('executing');
   }, []);
 
@@ -96,7 +140,7 @@ export const App = () => {
   }, []);
 
   const handleViewDiff = useCallback(() => {
-    // Será implementado: exibe diff completo no terminal
+    // Futuro: exibir diff completo via less/pager
   }, []);
 
   if (screen === 'loading') {
@@ -149,13 +193,14 @@ export const App = () => {
   }
 
   // screen === 'executing'
+  const p = pipeline.progress;
   return (
     <ExecutionScreen
       macroTask={pipeline.macroTask}
-      dag={null}
-      logs={[]}
-      results={[]}
-      activeNodeId={null}
+      dag={p?.dag ?? null}
+      logs={p?.logs ?? []}
+      results={p?.results ?? []}
+      activeNodeId={p?.activeNodeId ?? null}
       startTime={pipeline.startTime}
     />
   );

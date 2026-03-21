@@ -30,10 +30,12 @@ export interface WorkerProgressEvent {
 
 /** Configuracao do Worker Runner */
 export interface WorkerRunnerConfig {
+  /** Modelo no formato "provider/modelId" (ex: "openai/gpt-4.1-mini") */
+  readonly model: string;
   /** API key do provider LLM */
   readonly apiKey: string;
-  /** Provider para autenticacao (default: 'anthropic') */
-  readonly provider?: string;
+  /** Temperatura do modelo (default: 0.7) */
+  readonly temperature?: number;
   /** Timeout em ms por node (default: 5 min) */
   readonly timeoutMs?: number;
   /** Callback para streaming de progresso */

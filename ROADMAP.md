@@ -188,7 +188,7 @@ Você é um engenheiro de schemas. Defina os schemas Zod que governam toda a com
 
 **Objetivo:** TUI interativo funcional que coleta configuração, contexto e macro-task.
 
-### Subtask 1.1: Tela de configuração (API Key + Modelos)
+### ~~Subtask 1.1: Tela de configuração (API Key + Modelos)~~ ✅ `branch-101 → main`
 
 **Depende de:** 0.3
 **Contexto obrigatório:**
@@ -263,7 +263,7 @@ ConfigScreen renderiza:
 
 ---
 
-### Subtask 1.2: Tela de seleção de contexto
+### ~~Subtask 1.2: Tela de seleção de contexto~~ ✅ `branch-102 → main`
 
 **Depende de:** 0.1
 **Contexto obrigatório:**
@@ -314,7 +314,7 @@ Renderiza: Box título + tree view + footer com contagem
 
 ---
 
-### Subtask 1.3: Tela de entrada da macro-task
+### ~~Subtask 1.3: Tela de entrada da macro-task~~ ✅ `branch-103 → main`
 
 **Depende de:** 0.3
 **Contexto obrigatório:**

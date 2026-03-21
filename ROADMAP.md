@@ -361,7 +361,7 @@ TaskScreen aceita props: { config: Config, contextFiles: string[], onSubmit: (ta
 
 ---
 
-### Subtask 1.4: Orquestrador de telas (App Router)
+### ~~Subtask 1.4: Orquestrador de telas (App Router)~~ ✅
 
 **Depende de:** 1.1, 1.2, 1.3
 **Contexto obrigatório:**

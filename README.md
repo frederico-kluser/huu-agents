@@ -66,6 +66,68 @@ O CLI opera com dois tiers de modelos independentes via OpenRouter:
 
 Para detalhes de cada fase, subtasks, arquivos e prompts, consultar [ROADMAP.md](./ROADMAP.md).
 
+### 17 subtasks e suas dependências
+
+```
+0.1 ─────────┐
+(scaffold)   │
+             ├──→ 0.2 (CLAUDE.md)         depende de 0.1
+             │
+             ├──→ 0.3 (schemas Zod)        depende de 0.1
+             │
+0.3 ─────────┼──→ 1.1 (config screen)     depende de 0.3
+             │
+0.1 ─────────┼──→ 1.2 (context screen)    depende de 0.1
+             │
+0.3 ─────────┼──→ 1.3 (task screen)       depende de 0.3
+             │
+1.1+1.2+1.3 ─┼──→ 1.4 (app router)        depende de 1.1, 1.2, 1.3
+             │
+0.3 ─────────┼──→ 2.1 (planner prompt)    depende de 0.3
+             │
+0.1 ─────────┼──→ 2.2 (explorer ReAct)    depende de 0.1
+             │
+2.1+2.2 ─────┼──→ 2.3 (planner pipeline)  depende de 2.1, 2.2
+             │
+0.3 ─────────┼──→ 2.4 (dag screen)        depende de 0.3
+             │
+0.1 ─────────┼──→ 3.1 (git wrapper)       depende de 0.1
+             │
+0.3+3.1 ─────┼──→ 3.2 (dag executor)      depende de 0.3, 3.1
+             │
+0.3 ─────────┼──→ 4.1 (worker prompt)     depende de 0.3
+             │
+4.1 ─────────┼──→ 4.2 (worker runner)     depende de 4.1
+             │
+0.3 ─────────┼──→ 4.3 (execution screen)  depende de 0.3
+             │
+4.2 ─────────┼──→ 5.1 (retry handler)     depende de 4.2
+             │
+3.1 ─────────┼──→ 5.2 (conflict resolver) depende de 3.1
+             │
+0.3 ─────────┴──→ 5.3 (result screen)     depende de 0.3
+```
+
+### Waves de paralelismo
+
+| Wave | Subtasks paralelas | Pré-requisito |
+|------|-------------------|---------------|
+| **1** | `0.1` | nenhum |
+| **2** | `0.2` `0.3` | 0.1 |
+| **3** | `1.1` `1.2` `1.3` `2.1` `2.2` `2.4` `3.1` `4.1` `4.3` `5.3` | 0.3 |
+| **4** | `1.4` `2.3` `3.2` `4.2` `5.2` | wave 3 (parcial) |
+| **5** | `5.1` | 4.2 |
+
+**Wave 3** e o pico de paralelismo: 10 subtasks independentes que nao compartilham arquivos entre si (domínios isolados: UI, prompts, git, agentes). Poderiam ser 10 worktrees paralelas — dogfooding da propria arquitetura do projeto.
+
+### Caminho critico
+
+```
+0.1 → 0.3 → 2.1 → 2.3 → 3.2 → 4.1 → 4.2 → 5.1
+```
+
+8 steps sequenciais. Com paralelismo maximo na Wave 3, o throughput total e dominado por essa cadeia.
+
 ## Padrões de código (agent-friendly)
 
 Todo código da CLI — e todo código que os Workers geram — segue os padrões definidos em `docs/general/file-agent-patterns.md`:

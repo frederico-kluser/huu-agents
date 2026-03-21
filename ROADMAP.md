@@ -59,12 +59,12 @@ createPiSession(): chamar getModel(provider, modelId) e passar ao createAgentSes
 
 ### Tasks
 
-#### Task 1.1: Adicionar `model` ao `WorkerRunnerConfig`
+#### ~~Task 1.1: Adicionar `model` ao `WorkerRunnerConfig`~~ ✅
 
 **Arquivo:** `src/agents/worker-runner.ts`
 **Mudança:** Adicionar `model: string` (formato `provider/modelId`) ao `WorkerRunnerConfig`.
 
-#### Task 1.2: Parsear modelo no `createPiSession()`
+#### ~~Task 1.2: Parsear modelo no `createPiSession()`~~ ✅
 
 **Arquivo:** `src/agents/worker-runner.ts`
 **Mudança:**
@@ -75,7 +75,7 @@ createPiSession(): chamar getModel(provider, modelId) e passar ao createAgentSes
 
 **Atenção:** O `authStorage.setRuntimeApiKey()` precisa usar o provider extraído do modelo (não mais hardcoded `'anthropic'`). Se o modelo for `openai/gpt-4.1-mini`, o provider para auth é `openai`. Se for via OpenRouter, o provider para auth pode ser `openrouter` — verificar se o Pi SDK aceita `openrouter` como provider ou se precisa de tratamento especial.
 
-#### Task 1.3: Passar modelo do orchestrator ao runner
+#### ~~Task 1.3: Passar modelo do orchestrator ao runner~~ ✅
 
 **Arquivo:** `src/pipeline/orchestrator.ts`
 **Mudança:** Na `workerFn` (linha 141-172), passar `config.workerModel` ao `runWorker()`:
@@ -95,7 +95,7 @@ return runWorker(node, worktreePath, systemPrompt, {
 });
 ```
 
-#### Task 1.4: Integrar modelo no retry handler
+#### ~~Task 1.4: Integrar modelo no retry handler~~ ✅
 
 **Arquivo:** `src/pipeline/orchestrator.ts`
 **Mudança:** O `retryWorker` já recebe `model` via `RetryConfig`, mas o `executor` callback (linha 158) ignora `_model` e `_temperature`. Conectar esses parâmetros:
@@ -125,7 +125,7 @@ const outcome = await retryWorker(
 
 Isso implica adicionar `temperature` ao `WorkerRunnerConfig` e propagá-lo ao `createAgentSession()`.
 
-#### Task 1.5: Investigar provider OpenRouter no Pi SDK
+#### ~~Task 1.5: Investigar provider OpenRouter no Pi SDK~~ ✅
 
 **Pesquisa necessária:** O Pi SDK usa `getModel("openai", "gpt-4.1-mini")` com providers diretos. Mas o Pi DAG CLI usa OpenRouter como proxy. Verificar:
 - O Pi SDK suporta `getModel("openrouter", "openai/gpt-4.1-mini")`?
@@ -170,7 +170,7 @@ Mas o **runner** (`worker-runner.ts`) deveria fazer o commit após o agente term
 
 ### Tasks
 
-#### Task 2.1: Runner faz commit após agente completar
+#### ~~Task 2.1: Runner faz commit após agente completar~~ ✅
 
 **Arquivo:** `src/agents/worker-runner.ts`
 **Mudança:** Após `getModifiedFiles()`, se há mudanças e status é `success` ou `partial`, fazer commit:
@@ -217,7 +217,7 @@ return WorkerResultSchema.parse({
 
 **Atenção:** O `commit()` de `git-wrapper.ts` (linha 146-160) já faz `git add -A` internamente. Mas o agente também faz `git add` via prompt. Isso é idempotente (add de arquivos já staged é no-op), então não causa problema.
 
-#### Task 2.2: Atualizar prompt do worker para não pedir git add
+#### ~~Task 2.2: Atualizar prompt do worker para não pedir git add~~ ✅
 
 **Arquivo:** `src/prompts/worker.prompt.ts`
 **Mudança:** Agora que o runner faz commit automaticamente (incluindo `git add -A`), o prompt não precisa mais pedir ao agente para fazer `git add`. Remover:
@@ -232,7 +232,7 @@ return WorkerResultSchema.parse({
 
 Isso simplifica a instrução ao agente e evita conflito entre `git add` do agente e `git add -A` do `commit()`.
 
-#### Task 2.3: Validar que executor faz merge corretamente
+#### ~~Task 2.3: Validar que executor faz merge corretamente~~ ✅
 
 **Arquivo:** `src/pipeline/dag-executor.ts`
 **Verificação:** A lógica de merge (linhas 168-177) já está correta — só precisa de `commitHash` preenchido:
@@ -251,7 +251,7 @@ O único ajuste potencial: se o worker teve status `partial` mas fez mudanças, 
 
 Verificar se queremos que `partial` entre no `completed` set ou se deve ter tratamento diferente no executor. Atualmente, `partial` não causa throw (só `failure` causa throw na linha 164-166), então um worker `partial` com commitHash será mergeado e marcado como completed. **Decisão de design a tomar.**
 
-#### Task 2.4: Garantir cleanup seguro do worktree após commit
+#### ~~Task 2.4: Garantir cleanup seguro do worktree após commit~~ ✅
 
 **Arquivo:** `src/pipeline/dag-executor.ts`
 **Verificação:** O `finally` (linha 181-183) remove o worktree incondicionalmente:

@@ -147,6 +147,11 @@ export async function runWorker(
     }
   }
 
+  // Alerta se mudanças foram produzidas mas o commit falhou — worktree será removido pelo executor
+  if (filesModified.length > 0 && !commitHash) {
+    emit('error', `AVISO: ${filesModified.length} arquivo(s) modificado(s) mas commit falhou — mudancas podem ser perdidas no cleanup do worktree`);
+  }
+
   emit('done', `Status: ${status}, ${filesModified.length} arquivo(s), commit: ${commitHash?.slice(0, 7) ?? 'nenhum'}`);
 
   return WorkerResultSchema.parse({

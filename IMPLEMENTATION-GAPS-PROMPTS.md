@@ -10,9 +10,11 @@ Regras de uso:
 - Prefira diffs pequenos, sem refactors paralelos.
 - Sempre valide com os comandos relevantes ao final de cada task.
 
-## Task 1: Corrigir lint quebrado no ESLint 9
+## Task 1: Corrigir lint quebrado no ESLint 9 [DONE]
 
-Problema atual:
+Implementado: `eslint.config.js` flat config com `typescript-eslint` + `@eslint/js`. Removido `.eslintrc.json` legado, script lint atualizado para `eslint src/`. `npm run lint` passa (0 errors, warnings preexistentes).
+
+Problema original:
 - `npm run lint` falha porque o projeto usa ESLint 9 sem `eslint.config.*` flat config.
 
 Arquivos e contexto relevantes:
@@ -76,9 +78,11 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Task 2: Implementar diff final real no fluxo de resultado
+## Task 2: Implementar diff final real no fluxo de resultado [DONE]
 
-Problema atual:
+Implementado: `src/screens/diff-screen.tsx` — viewer scrollavel com syntax highlighting (j/k scroll, space/b page, q voltar). Screen `'diff'` adicionada ao state machine do app. `[d]` executa `git diff main...{branch}` e exibe o patch real. Navegacao result <-> diff funcional.
+
+Problema original:
 - A tela final oferece `[d] ver diff`, mas o callback ainda esta stubado em `onViewDiff={() => {}}`.
 
 Arquivos e contexto relevantes:
@@ -145,9 +149,11 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Task 3: Implementar retry seletivo de nodes falhados
+## Task 3: Implementar retry seletivo de nodes falhados [DONE]
 
-Problema atual:
+Implementado: `retryPipeline()` no orchestrator reutiliza DAG/branch existentes sem rodar o Planner. `executeDAG` aceita `completedNodeIds` para pular nodes ja concluidos. `RetryContext` em `app.tsx` preserva DAG, branch e resultados anteriores. `ResultScreen` deriva `failedNodeIds` dos nodes (corrige bug onde botao retry nunca aparecia). Falhas agora registradas como `WorkerResult` nos resultados.
+
+Problema original:
 - A `ResultScreen` entrega `failedNodeIds`, mas o app reinicia o pipeline inteiro em vez de reexecutar seletivamente apenas os nodes necessarios.
 
 Arquivos e contexto relevantes:
@@ -528,10 +534,10 @@ Dependencias recomendadas de ordem:
 - Task 5 e independente das demais no plano tecnico, mas deve ser tratada depois do baseline de lint/typecheck estar verde para facilitar iteracao segura.
 
 Ordem recomendada de execucao:
-1. Task 1
+1. ~~Task 1~~ [DONE]
 2. Task 7
 3. Task 6
 4. Task 4
-5. Task 2
-6. Task 3
+5. ~~Task 2~~ [DONE]
+6. ~~Task 3~~ [DONE]
 7. Task 5

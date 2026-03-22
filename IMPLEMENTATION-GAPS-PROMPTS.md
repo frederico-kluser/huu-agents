@@ -1,89 +1,170 @@
-# Gaps Restantes e Prompts de Implementacao
+# Problemas Restantes e Prompts de Correcao
 
-Este arquivo organiza os gaps reais que ainda faltam no projeto e traz um prompt XML pronto para cada task.
+Este documento foi refeito do zero e agora contem apenas os problemas que ainda restam no codigo atual.
 
-Regras de uso:
-- Execute uma task por vez.
-- Leia primeiro todas as referencias `@...` da task antes de editar.
-- Preserve o estilo atual do projeto e as convencoes de [CLAUDE.md](/Volumes/Extension/Projects/huu-agents/CLAUDE.md).
-- Mantenha `selectedAgents` como fonte de verdade de configuracao; campos legados continuam apenas por compatibilidade.
-- Prefira diffs pequenos, sem refactors paralelos.
-- Sempre valide com os comandos relevantes ao final de cada task.
+Escopo:
+- Inclui somente gaps confirmados por revisao de codigo e validacao local.
+- Nao repete tasks ja consideradas corretas.
+- Cada problema abaixo tem um prompt XML proprio, pronto para execucao.
 
-## Task 1: Corrigir lint quebrado no ESLint 9 [DONE]
+Status fora deste documento:
+- A antiga Task 1 parece correta.
+- A antiga Task 5 parece correta.
+- A antiga Task 6 parece correta.
 
-Implementado: `eslint.config.js` flat config com `typescript-eslint` + `@eslint/js`. Removido `.eslintrc.json` legado, script lint atualizado para `eslint src/`. `npm run lint` passa (0 errors, warnings preexistentes).
+## Problema 1: `--task` nao funciona como o contrato promete
 
-Problema original:
-- `npm run lint` falha porque o projeto usa ESLint 9 sem `eslint.config.*` flat config.
+Diagnostico:
+- O contrato atual de CLI diz que `--task` pula a tela de input da macro-task.
+- No codigo atual, isso so acontece quando `--task` e `--context` chegam juntos.
+- Com apenas `--task`, a macro-task se perde antes da execucao porque a tela de task inicializa vazia.
 
 Arquivos e contexto relevantes:
 - @CLAUDE.md
 - @docs/general/file-agent-patterns.md
-- @docs/general/prompt-engineering.md
-- @docs/general/prompts-guide.md
+- @docs/general/context-building.md
+- @docs/general/context-building-2.md
+- @docs/general/story-breaking.md
 - @README.md
-- @package.json
-- @tsconfig.json
+- @src/cli.tsx
+- @src/cli-args.ts
+- @src/app.tsx
+- @src/screens/task-screen.tsx
 
 Prompt XML:
 
 ```xml
 <task_prompt>
   <background_information>
-    Voce esta trabalhando no Pi DAG Task CLI. O typecheck ja passa, mas o lint esta quebrado por incompatibilidade de configuracao com ESLint 9. A meta e restaurar um pipeline basico de lint sem alterar o comportamento funcional do produto.
+    O fluxo de CLI ja aceita a flag --task, mas o comportamento real nao bate com o contrato documentado. Hoje a macro-task passada por CLI so leva direto para execucao quando tambem existe --context. Com apenas --task, o valor se perde e o usuario precisa redigitar a task manualmente. Isso torna a implementacao incompleta.
   </background_information>
 
   <references>
     <item>@CLAUDE.md</item>
     <item>@docs/general/file-agent-patterns.md</item>
-    <item>@docs/general/prompt-engineering.md</item>
-    <item>@docs/general/prompts-guide.md</item>
+    <item>@docs/general/context-building.md</item>
+    <item>@docs/general/context-building-2.md</item>
+    <item>@docs/general/story-breaking.md</item>
     <item>@README.md</item>
-    <item>@package.json</item>
-    <item>@tsconfig.json</item>
+    <item>@src/cli.tsx</item>
+    <item>@src/cli-args.ts</item>
+    <item>@src/app.tsx</item>
+    <item>@src/screens/task-screen.tsx</item>
   </references>
 
   <objective>
-    Corrigir a infraestrutura de lint para ESLint 9 usando flat config, com o menor diff possivel, mantendo TypeScript strict e as convencoes do projeto. Nao introduza refactors amplos no codigo-fonte so para satisfazer lint; se houver regras novas, ajuste-as de forma pragmatica e minima.
+    Fazer a flag --task funcionar de forma consistente com o contrato da CLI. A macro-task passada por argumento deve ser preservada corretamente e o fluxo deve evitar redigitacao desnecessaria.
   </objective>
 
   <instructions>
-    <item>Inspecione a configuracao atual de lint no package.json e arquivos de projeto existentes.</item>
-    <item>Crie a configuracao flat do ESLint 9 apropriada para TypeScript ESM/NodeNext e JSX usado pelo Ink.</item>
-    <item>Se for necessario adicionar dependencias de lint que estejam faltando, mantenha o conjunto minimo e coerente com o stack atual.</item>
-    <item>Nao mude regras para algo excessivamente restritivo; o objetivo e restaurar lint util e executavel.</item>
-    <item>Se surgirem erros de lint preexistentes, corrija apenas os que forem necessarios para deixar o comando verde ou documente claramente o menor conjunto de exclusoes/ajustes para evitar uma task acoplada de limpeza massiva.</item>
-    <item>Atualize a documentacao apenas se o comando de lint ou seus pre-requisitos mudarem.</item>
+    <item>Mapeie o bootstrap atual entre parseCliArgs, App e TaskScreen.</item>
+    <item>Defina um comportamento unico e claro para --task sem --context e para --task com --context.</item>
+    <item>Se a tela de task continuar existindo nesse fluxo, ela deve ser inicializada com o valor vindo da CLI.</item>
+    <item>Se optar por pular a tela de task, faca isso apenas quando o comportamento permanecer previsivel.</item>
+    <item>Mantenha a precedencia de CLI sobre estado inicial em memoria, sem introduzir mutacao escondida.</item>
+    <item>Atualize a README apenas se o contrato final mudar.</item>
   </instructions>
 
   <constraints>
-    <item>Preserve o comportamento atual do runtime.</item>
-    <item>Sem refactor de arquitetura.</item>
-    <item>Sem trocar TypeScript strict por configuracoes permissivas.</item>
-    <item>Sem usar any para contornar problemas.</item>
+    <item>Nao duplicar parsing de argumentos em mais de um lugar.</item>
+    <item>Nao quebrar o fluxo TUI interativo padrao.</item>
+    <item>Nao introduzir logica de bootstrap opaca ou dependente de efeitos colaterais.</item>
   </constraints>
 
   <acceptance_criteria>
-    <item>`npm run lint` termina com sucesso.</item>
-    <item>`npm run typecheck` continua passando.</item>
-    <item>A configuracao final esta alinhada com ESLint 9 flat config.</item>
-    <item>O diff e focado em tooling e pequenos ajustes correlatos.</item>
+    <item>`--task` sozinho nao perde a macro-task passada.</item>
+    <item>`--task` com `--context` continua funcionando.</item>
+    <item>O comportamento final bate com a README e com o texto de ajuda.</item>
+    <item>`npm run typecheck` passa.</item>
   </acceptance_criteria>
 
   <validation>
-    <item>Execute `npm run lint`.</item>
     <item>Execute `npm run typecheck`.</item>
+    <item>Teste manualmente `node dist/cli.js --task "Refatorar auth"`.</item>
+    <item>Teste manualmente `node dist/cli.js --task "Refatorar auth" --context src/auth`.</item>
   </validation>
 </task_prompt>
 ```
 
-## Task 2: Implementar diff final real no fluxo de resultado [DONE]
+## Problema 2: overrides de modelo por CLI estao vazando para a config persistida
 
-Implementado: `src/screens/diff-screen.tsx` — viewer scrollavel com syntax highlighting (j/k scroll, space/b page, q voltar). Screen `'diff'` adicionada ao state machine do app. `[d]` executa `git diff main...{branch}` e exibe o patch real. Navegacao result <-> diff funcional.
+Diagnostico:
+- A README afirma que `--planner` e `--worker` valem apenas para a sessao atual.
+- No fluxo atual, esses overrides podem ser salvos no arquivo de config em alguns cenarios, especialmente ao concluir a configuracao.
+- Isso cria divergencia entre documentacao e comportamento real.
 
-Problema original:
-- A tela final oferece `[d] ver diff`, mas o callback ainda esta stubado em `onViewDiff={() => {}}`.
+Arquivos e contexto relevantes:
+- @CLAUDE.md
+- @docs/general/file-agent-patterns.md
+- @docs/general/context-building.md
+- @README.md
+- @src/cli.tsx
+- @src/cli-args.ts
+- @src/app.tsx
+- @src/hooks/use-config.ts
+- @src/schemas/config.schema.ts
+- @src/screens/config-screen.tsx
+
+Prompt XML:
+
+```xml
+<task_prompt>
+  <background_information>
+    O sistema aceita overrides de modelos via CLI, mas o contrato atual diz que esses overrides sao apenas da sessao. O codigo atual mistura override de sessao com persistencia de configuracao em alguns caminhos, o que gera comportamento surpreendente e torna a README incorreta na pratica.
+  </background_information>
+
+  <references>
+    <item>@CLAUDE.md</item>
+    <item>@docs/general/file-agent-patterns.md</item>
+    <item>@docs/general/context-building.md</item>
+    <item>@README.md</item>
+    <item>@src/cli.tsx</item>
+    <item>@src/cli-args.ts</item>
+    <item>@src/app.tsx</item>
+    <item>@src/hooks/use-config.ts</item>
+    <item>@src/schemas/config.schema.ts</item>
+    <item>@src/screens/config-screen.tsx</item>
+  </references>
+
+  <objective>
+    Separar corretamente override de sessao e configuracao persistida. Flags de modelo da CLI devem afetar apenas a execucao atual, sem contaminar o arquivo salvo, a menos que o contrato do produto mude explicitamente.
+  </objective>
+
+  <instructions>
+    <item>Mapeie todos os pontos onde applyModelOverrides e saveConfig interagem.</item>
+    <item>Garanta que a config persistida reflita apenas escolhas intencionais do usuario, nao overrides temporarios de sessao.</item>
+    <item>Mantenha a precedencia CLI em memoria durante a sessao atual.</item>
+    <item>Evite introduzir dois estados de config divergentes sem regra clara.</item>
+    <item>Se a UX precisar mostrar os modelos efetivos da sessao, isso deve acontecer sem reescrever a config salva.</item>
+    <item>Confirme que a README final descreve exatamente o comportamento implementado.</item>
+  </instructions>
+
+  <constraints>
+    <item>Nao remover suporte a override por CLI.</item>
+    <item>Nao alterar o schema de config sem necessidade.</item>
+    <item>Nao misturar persistencia com estado de sessao de forma implicita.</item>
+  </constraints>
+
+  <acceptance_criteria>
+    <item>`--planner` e `--worker` nao vazam para o arquivo de config salvo.</item>
+    <item>Os overrides continuam valendo durante a sessao atual.</item>
+    <item>A README e o comportamento real ficam alinhados.</item>
+    <item>`npm run typecheck` passa.</item>
+  </acceptance_criteria>
+
+  <validation>
+    <item>Execute `npm run typecheck`.</item>
+    <item>Teste um fluxo com override por CLI e confirme que o arquivo `~/.pi-dag-cli.json` nao e reescrito com esses modelos de sessao.</item>
+  </validation>
+</task_prompt>
+```
+
+## Problema 3: diff final continua hardcoded em `main`
+
+Diagnostico:
+- O diff final real existe, mas ainda usa `main...branch` diretamente.
+- Isso quebra ou distorce o resultado em repositorios cujo branch base nao seja `main`.
+- A funcionalidade esta implementada, mas ainda nao esta correta de forma geral.
 
 Arquivos e contexto relevantes:
 - @CLAUDE.md
@@ -92,7 +173,7 @@ Arquivos e contexto relevantes:
 - @docs/general/story-breaking.md
 - @README.md
 - @src/app.tsx
-- @src/screens/result-screen.tsx
+- @src/screens/diff-screen.tsx
 - @src/pipeline/orchestrator.ts
 - @src/git/git-wrapper.ts
 
@@ -101,7 +182,7 @@ Prompt XML:
 ```xml
 <task_prompt>
   <background_information>
-    O produto ja exibe resumo final de branch e diff stat, mas a acao de visualizar o diff completo ainda nao funciona. Ha expectativa explicita de UX no terminal para [d] ver diff. A implementacao deve respeitar o padrao atual de telas Ink e manter a navegacao simples.
+    O viewer de diff final ja existe, mas ainda assume que a base de comparacao e sempre a branch main. Isso torna a feature incorreta em repositorios cujo branch padrao seja diferente, ou em execucoes cuja base real precise ser derivada dinamicamente.
   </background_information>
 
   <references>
@@ -111,50 +192,48 @@ Prompt XML:
     <item>@docs/general/story-breaking.md</item>
     <item>@README.md</item>
     <item>@src/app.tsx</item>
-    <item>@src/screens/result-screen.tsx</item>
+    <item>@src/screens/diff-screen.tsx</item>
     <item>@src/pipeline/orchestrator.ts</item>
     <item>@src/git/git-wrapper.ts</item>
   </references>
 
   <objective>
-    Implementar um fluxo real para visualizacao do diff final da execucao, sem quebrar a TUI. O usuario deve conseguir sair da tela de resultado, abrir o diff completo, inspecionar o patch final da branch gerada e voltar de forma previsivel ou encerrar o CLI sem estados inconsistentes.
+    Tornar o diff final realmente correto em relacao a branch base da execucao, sem depender de `main` hardcoded. O diff stat e o diff completo devem usar a mesma base real.
   </objective>
 
   <instructions>
-    <item>Analise como o diff stat e atualmente calculado e identifique a melhor origem para o diff completo.</item>
-    <item>Escolha uma implementacao minima e consistente com Ink. Pode ser uma nova tela de diff, um viewer simples paginado, ou uma estrategia equivalente claramente integrada ao fluxo atual.</item>
-    <item>Evite depender de comportamento externo opaco; a experiencia precisa ser previsivel dentro do CLI.</item>
-    <item>Se criar nova tela ou componente, mantenha responsabilidade unica e nomes descritivos.</item>
-    <item>Reutilize o branch final e o contexto de execucao existentes em vez de recalcular dados sem necessidade.</item>
-    <item>Garanta que o keybinding `[d]` realmente abre algo util e que `[q]` continua funcionando.</item>
+    <item>Mapeie de onde deve vir a branch base real da task.</item>
+    <item>Escolha uma estrategia robusta para determinar essa base sem depender de convencao local fragil.</item>
+    <item>Garanta que o mesmo criterio seja usado tanto no diff stat quanto no viewer de diff.</item>
+    <item>Mantenha o contrato de UI atual: resultado final abre diff real e continua navegavel.</item>
+    <item>Se precisar propagar a base via estado do app ou do pipeline, faca a menor mudanca tipada possivel.</item>
   </instructions>
 
   <constraints>
-    <item>Nao implemente um diff fake baseado apenas no diffStat.</item>
-    <item>Nao esconda o problema com logs no console.</item>
-    <item>Nao altere o contrato de resultado de forma que quebre a tela final.</item>
+    <item>Nao manter `main` hardcoded como unica base.</item>
+    <item>Nao recalcular a base com heuristica inconsistente entre telas.</item>
+    <item>Nao transformar a task em refactor amplo do pipeline.</item>
   </constraints>
 
   <acceptance_criteria>
-    <item>Ao final da execucao, `[d]` mostra o diff completo real da branch final.</item>
-    <item>O usuario consegue voltar ou sair sem travar a TUI.</item>
-    <item>O fluxo continua compativel com Ink e com o estado atual do app.</item>
+    <item>Diff stat e diff completo usam a mesma base real.</item>
+    <item>A feature funciona em repositorios cujo branch padrao nao e `main`.</item>
     <item>`npm run typecheck` passa.</item>
   </acceptance_criteria>
 
   <validation>
     <item>Execute `npm run typecheck`.</item>
-    <item>Rode um fluxo manual simples e valide que `[d]` exibe diff real.</item>
+    <item>Valide manualmente o diff em um repo onde a branch base nao seja `main`, ou simule esse cenario de forma controlada.</item>
   </validation>
 </task_prompt>
 ```
 
-## Task 3: Implementar retry seletivo de nodes falhados [DONE]
+## Problema 4: blocked e failed continuam misturados no resumo final
 
-Implementado: `retryPipeline()` no orchestrator reutiliza DAG/branch existentes sem rodar o Planner. `executeDAG` aceita `completedNodeIds` para pular nodes ja concluidos. `RetryContext` em `app.tsx` preserva DAG, branch e resultados anteriores. `ResultScreen` deriva `failedNodeIds` dos nodes (corrige bug onde botao retry nunca aparecia). Falhas agora registradas como `WorkerResult` nos resultados.
-
-Problema original:
-- A `ResultScreen` entrega `failedNodeIds`, mas o app reinicia o pipeline inteiro em vez de reexecutar seletivamente apenas os nodes necessarios.
+Diagnostico:
+- O retry seletivo existe, mas o pipeline ainda trata dependentes bloqueados como se fossem falhas diretas.
+- O schema do DAG nao diferencia `blocked`.
+- A `ResultScreen` calcula bloqueados olhando para `pending`, o que nao representa o bloqueio real propagado pelo executor.
 
 Arquivos e contexto relevantes:
 - @CLAUDE.md
@@ -162,10 +241,9 @@ Arquivos e contexto relevantes:
 - @docs/general/ink.md
 - @docs/general/story-breaking.md
 - @README.md
-- @src/app.tsx
-- @src/screens/result-screen.tsx
-- @src/pipeline/orchestrator.ts
 - @src/pipeline/dag-executor.ts
+- @src/pipeline/orchestrator.ts
+- @src/screens/result-screen.tsx
 - @src/schemas/dag.schema.ts
 - @src/schemas/worker-result.schema.ts
 
@@ -174,7 +252,7 @@ Prompt XML:
 ```xml
 <task_prompt>
   <background_information>
-    O produto ja comunica a intencao correta de UX: retry apenas dos nodes falhados. Hoje isso nao acontece porque o app reinicia toda a execucao. A correcao precisa tratar estado, DAG, resultados ja bem-sucedidos e dependencias sem introduzir comportamento ambiguo.
+    O retry seletivo foi implementado, mas a semantica do resultado final ainda esta errada: nodes bloqueados por dependencia falha acabam entrando como failed. Isso distorce o resumo final, embaralha a leitura do DAG e dificulta diagnostico do usuario.
   </background_information>
 
   <references>
@@ -183,65 +261,62 @@ Prompt XML:
     <item>@docs/general/ink.md</item>
     <item>@docs/general/story-breaking.md</item>
     <item>@README.md</item>
-    <item>@src/app.tsx</item>
-    <item>@src/screens/result-screen.tsx</item>
-    <item>@src/pipeline/orchestrator.ts</item>
     <item>@src/pipeline/dag-executor.ts</item>
+    <item>@src/pipeline/orchestrator.ts</item>
+    <item>@src/screens/result-screen.tsx</item>
     <item>@src/schemas/dag.schema.ts</item>
     <item>@src/schemas/worker-result.schema.ts</item>
   </references>
 
   <objective>
-    Implementar retry seletivo real: o usuario deve conseguir reexecutar apenas os nodes falhados, preservando os resultados bem-sucedidos que continuam validos e recalculando apenas o minimo necessario para manter coerencia do DAG.
+    Separar semanticamente `blocked` de `failed` em todo o fluxo relevante: executor, estado do DAG, resultados e tela final. O usuario deve conseguir distinguir falha direta de bloqueio por dependencia.
   </objective>
 
   <instructions>
-    <item>Mapeie o contrato atual entre ResultScreen, App, Orchestrator e DAG Executor.</item>
-    <item>Defina com precisao quais nodes entram no retry: apenas falhados, falhados mais dependentes bloqueados, ou outro criterio. Documente esse criterio no codigo de forma sucinta se ele nao for obvio.</item>
-    <item>Evite rerodar o planner se nao for estritamente necessario.</item>
-    <item>Preserve resultados bem-sucedidos e seus metadados quando eles continuarem validos.</item>
-    <item>Garanta que a UI de execucao e de resultado reflitam corretamente uma reexecucao parcial.</item>
-    <item>Se a implementacao exigir extensao de contrato, faca a menor mudanca coerente e tipada possivel.</item>
+    <item>Mapeie o caminho atual de propagacao de falha no executor e no orchestrator.</item>
+    <item>Defina um modelo coerente para representar blocked, incluindo schema e resumo final.</item>
+    <item>Atualize a ResultScreen para refletir os estados reais e nao inferir bloqueio a partir de pending.</item>
+    <item>Mantenha compatibilidade com o retry seletivo ja existente.</item>
+    <item>Se for necessario adicionar evento ou status novo, faça isso com o menor impacto tipado possivel.</item>
   </instructions>
 
   <constraints>
-    <item>Nao faca retry total disfarcado.</item>
-    <item>Nao descarte resultados anteriores sem necessidade.</item>
-    <item>Nao introduza estado mutavel dificil de rastrear.</item>
+    <item>Nao mascarar blocked como failed.</item>
+    <item>Nao quebrar o contrato de retry ja existente.</item>
+    <item>Nao deixar a UI derivando semantica errada de um estado generico.</item>
   </constraints>
 
   <acceptance_criteria>
-    <item>`onRetry(failedNodeIds)` leva a uma reexecucao seletiva real.</item>
-    <item>Nodes bem-sucedidos nao sao rerodados sem necessidade.</item>
-    <item>A DAG final e os resultados permanecem coerentes apos o retry.</item>
+    <item>O fluxo diferencia blocked de failed de ponta a ponta.</item>
+    <item>A tela final mostra contagens e listas coerentes com essa diferenca.</item>
+    <item>Retry seletivo continua funcional.</item>
     <item>`npm run typecheck` passa.</item>
   </acceptance_criteria>
 
   <validation>
     <item>Execute `npm run typecheck`.</item>
-    <item>Simule um caso com pelo menos um node falhado e confirme que apenas o subconjunto esperado e reexecutado.</item>
+    <item>Simule um caso em que um node falha e pelo menos um dependente fica bloqueado.</item>
   </validation>
 </task_prompt>
 ```
 
-## Task 4: Adicionar argumentos reais de CLI [DONE]
+## Problema 5: erros de escrita de config nao aparecem de forma confiavel para o usuario
 
-Implementado: `src/cli-args.ts` com parsing via `node:util/parseArgs` + validacao Zod. Flags: `--help`, `--version`, `--task`, `--context`, `--planner`, `--worker`. Precedencia CLI > config persistida > defaults. `App` aceita `cliArgs` como props e pula telas conforme flags fornecidas. README atualizada com documentacao dos argumentos.
-
-Problema original:
-- O entrypoint apenas renderiza a TUI; nao ha parsing de argumentos como task inicial, arquivos de contexto, modelos, help ou version.
+Diagnostico:
+- A classificacao de erros de config melhorou, mas falhas de escrita ainda podem ficar invisiveis.
+- O app pode navegar para a proxima tela sem aguardar a persistencia terminar.
+- Isso deixa casos de `permission_error` e `write_error` mal resolvidos no fluxo principal.
 
 Arquivos e contexto relevantes:
 - @CLAUDE.md
 - @docs/general/file-agent-patterns.md
 - @docs/general/context-building.md
 - @docs/general/context-building-2.md
-- @docs/general/story-breaking.md
 - @README.md
-- @package.json
-- @src/cli.tsx
 - @src/app.tsx
 - @src/hooks/use-config.ts
+- @src/screens/config-screen.tsx
+- @src/schemas/errors.ts
 - @src/schemas/config.schema.ts
 
 Prompt XML:
@@ -249,7 +324,7 @@ Prompt XML:
 ```xml
 <task_prompt>
   <background_information>
-    O projeto se apresenta como CLI, mas hoje opera apenas no modo TUI interativo. Falta uma camada real de argumentos para automatizacao, integracao com shell e bootstrap mais rapido. A implementacao deve manter compatibilidade com o fluxo atual, sem destruir a experiencia interativa existente.
+    O tratamento de erro de configuracao esta melhor classificado, mas ainda existe um gap de UX e confiabilidade: se salvar a config falhar, o usuario pode ser levado adiante no fluxo sem ver o erro. Isso torna a correção incompleta para casos reais de permissao, escrita ou IO.
   </background_information>
 
   <references>
@@ -257,297 +332,61 @@ Prompt XML:
     <item>@docs/general/file-agent-patterns.md</item>
     <item>@docs/general/context-building.md</item>
     <item>@docs/general/context-building-2.md</item>
-    <item>@docs/general/story-breaking.md</item>
     <item>@README.md</item>
-    <item>@package.json</item>
-    <item>@src/cli.tsx</item>
     <item>@src/app.tsx</item>
     <item>@src/hooks/use-config.ts</item>
-    <item>@src/schemas/config.schema.ts</item>
-  </references>
-
-  <objective>
-    Adicionar parsing real de argumentos no CLI com um conjunto pequeno, util e bem definido. O produto deve continuar funcionando em modo interativo por padrao, mas permitir bootstrap por flags para reduzir friccao e habilitar automacao.
-  </objective>
-
-  <instructions>
-    <item>Defina um conjunto minimo de flags de alto valor, por exemplo `--help`, `--version`, `--task`, `--context`, `--planner`, `--worker`, e outras que facam sentido pelo estado atual do projeto.</item>
-    <item>Evite criar uma superficie grande demais; priorize flags realmente sustentadas pelo runtime atual.</item>
-    <item>Projete a integracao com `App` e `useConfig` de modo tipado, sem duplicar regras de validacao.</item>
-    <item>Se uma flag puder entrar em conflito com config persistida, estabeleca precedencia explicita e coerente.</item>
-    <item>Atualize a README para refletir o novo contrato da CLI.</item>
-    <item>Se decidir adicionar suporte a uma flag de concorrencia, alinhe com a task de limite configuravel de concorrencia em vez de duplicar modelagem.</item>
-  </instructions>
-
-  <constraints>
-    <item>Nao quebre o fluxo TUI existente por padrao.</item>
-    <item>Nao implemente flags que o runtime ainda nao consegue honrar.</item>
-    <item>Nao espalhe parsing manual sem tipagem e validacao centralizada.</item>
-  </constraints>
-
-  <acceptance_criteria>
-    <item>O CLI responde a `--help` e `--version`.</item>
-    <item>E possivel preconfigurar pelo menos task e contexto por argumentos reais.</item>
-    <item>A precedencia entre flags e config persistida esta clara e implementada.</item>
-    <item>A README documenta os argumentos suportados.</item>
-    <item>`npm run typecheck` passa.</item>
-  </acceptance_criteria>
-
-  <validation>
-    <item>Execute `npm run typecheck`.</item>
-    <item>Teste manualmente `node dist/cli.js --help` e ao menos um fluxo com `--task` e `--context`.</item>
-  </validation>
-</task_prompt>
-```
-
-## Task 5: Integrar resolvedor avancado de conflito ao executor [DONE]
-
-Implementado: `dag-executor.ts` agora usa `mergeWithResolution` em vez de `merge` simples. Estrategia em duas etapas: merge normal → fallback `-X theirs` (last writer wins) → erro detalhado. Novo evento `merge-resolved` emitido com estrategia e arquivos conflitantes. Orchestrator loga a estrategia usada para diagnostico.
-
-Problema original:
-- O projeto possui `mergeWithResolution` em `src/git/conflict-resolver.ts`, mas o `dag-executor` ainda usa merge simples.
-- Existe tambem a oportunidade de avaliar uma etapa mais inteligente de commit/merge assistida por agente Pi apenas quando o merge normal falhar, em vez de alterar o worker para assumir responsabilidades que hoje pertencem ao orquestrador.
-
-Arquivos e contexto relevantes:
-- @CLAUDE.md
-- @docs/general/file-agent-patterns.md
-- @docs/general/prompt-engineering.md
-- @docs/general/prompts-guide.md
-- @docs/general/context-building.md
-- @docs/general/story-breaking.md
-- @README.md
-- @src/pipeline/dag-executor.ts
-- @src/git/conflict-resolver.ts
-- @src/git/git-wrapper.ts
-- @src/agents/worker-runner.ts
-- @src/prompts/worker.prompt.ts
-- @src/pipeline/orchestrator.ts
-
-Prompt XML:
-
-```xml
-<task_prompt>
-  <background_information>
-    O projeto ja isolou um resolvedor de conflitos mais sofisticado, mas ele nao participa do caminho principal de merge. Ao mesmo tempo, o prompt do worker foi simplificado para deixar commit/merge no orquestrador. A task precisa melhorar a confiabilidade de merge sem embaralhar responsabilidades entre worker e pipeline.
-  </background_information>
-
-  <references>
-    <item>@CLAUDE.md</item>
-    <item>@docs/general/file-agent-patterns.md</item>
-    <item>@docs/general/prompt-engineering.md</item>
-    <item>@docs/general/prompts-guide.md</item>
-    <item>@docs/general/context-building.md</item>
-    <item>@docs/general/story-breaking.md</item>
-    <item>@README.md</item>
-    <item>@src/pipeline/dag-executor.ts</item>
-    <item>@src/git/conflict-resolver.ts</item>
-    <item>@src/git/git-wrapper.ts</item>
-    <item>@src/agents/worker-runner.ts</item>
-    <item>@src/prompts/worker.prompt.ts</item>
-    <item>@src/pipeline/orchestrator.ts</item>
-  </references>
-
-  <objective>
-    Integrar o caminho avancado de resolucao de conflitos ao fluxo principal de execucao, priorizando a menor mudanca robusta. Avalie explicitamente se a solucao deve ser: (a) trocar merge simples por `mergeWithResolution`, ou (b) adicionar um fallback controlado, possivelmente assistido por agente, apenas quando o merge direto falhar. Prefira a opcao mais simples que aumente confiabilidade real.
-  </objective>
-
-  <instructions>
-    <item>Mapeie o fluxo de merge atual no DAG Executor e identifique o ponto exato onde o resolvedor avancado deve entrar.</item>
-    <item>Mantenha a responsabilidade de edicao de arquivos no worker e a responsabilidade de integracao no pipeline/orquestrador.</item>
-    <item>Se houver fallback assistido por agente, ele deve ser opcional, contido e acionado apenas em caso de conflito real, nunca no caminho feliz.</item>
-    <item>Evite transformar o worker em resolvedor de merge generico.</item>
-    <item>Garanta logging/resultado suficiente para diagnosticar quando merge simples, merge com resolucao e fallback assistido forem usados.</item>
-    <item>Documente claramente o criterio de fallback no codigo se ele nao for autoevidente.</item>
-  </instructions>
-
-  <constraints>
-    <item>Nao reescreva a arquitetura inteira do executor.</item>
-    <item>Nao mova commit/merge para dentro do worker por conveniencia.</item>
-    <item>Nao adicione um agente extra no caminho feliz sem justificativa forte.</item>
-  </constraints>
-
-  <acceptance_criteria>
-    <item>O caminho principal de merge deixa de depender apenas de `merge(...)` simples.</item>
-    <item>Conflitos reais passam a ter uma estrategia de resolucao integrada e previsivel.</item>
-    <item>O contrato de responsabilidades entre worker e orquestrador permanece claro.</item>
-    <item>`npm run typecheck` passa.</item>
-  </acceptance_criteria>
-
-  <validation>
-    <item>Execute `npm run typecheck`.</item>
-    <item>Valide pelo menos um cenario de merge sem conflito e um cenario com conflito controlado.</item>
-  </validation>
-</task_prompt>
-```
-
-## Task 6: Adicionar limite configuravel de concorrencia [DONE]
-
-Implementado: campo `maxConcurrency` no `ConfigSchema` (Zod, int 1-16, default 4). `runWithConcurrency` no `dag-executor.ts` como semaforo cooperativo que limita Promises ativas por wave. `executeDAG` recebe `maxConcurrency` como parametro. Orchestrator passa `config.maxConcurrency`. ConfigScreen inclui etapa `'concurrency'` para o usuario ajustar o valor. README atualizada.
-
-Problema original:
-- O executor processa por waves, mas nao existe um limite explicito e configuravel de concorrencia para controlar quantos workers rodam ao mesmo tempo.
-
-Arquivos e contexto relevantes:
-- @CLAUDE.md
-- @docs/general/file-agent-patterns.md
-- @docs/general/story-breaking.md
-- @docs/general/context-building.md
-- @README.md
-- @src/pipeline/dag-executor.ts
-- @src/pipeline/orchestrator.ts
-- @src/schemas/config.schema.ts
-- @src/hooks/use-config.ts
-- @src/screens/config-screen.tsx
-
-Prompt XML:
-
-```xml
-<task_prompt>
-  <background_information>
-    A execucao paralela por waves existe, mas falta governanca operacional sobre concorrencia. Sem um limite configuravel, o comportamento pode variar demais conforme o tamanho da DAG, o numero de worktrees e o custo dos modelos escolhidos. A task deve introduzir esse controle sem desfigurar o pipeline atual.
-  </background_information>
-
-  <references>
-    <item>@CLAUDE.md</item>
-    <item>@docs/general/file-agent-patterns.md</item>
-    <item>@docs/general/story-breaking.md</item>
-    <item>@docs/general/context-building.md</item>
-    <item>@README.md</item>
-    <item>@src/pipeline/dag-executor.ts</item>
-    <item>@src/pipeline/orchestrator.ts</item>
-    <item>@src/schemas/config.schema.ts</item>
-    <item>@src/hooks/use-config.ts</item>
     <item>@src/screens/config-screen.tsx</item>
-  </references>
-
-  <objective>
-    Introduzir um limite explicito e configuravel de concorrencia, persistido na configuracao do usuario e respeitado pelo executor. A experiencia deve continuar simples: valor default sensato, validacao forte e impacto minimo na UX atual.
-  </objective>
-
-  <instructions>
-    <item>Modele um campo de configuracao tipado e validado com Zod para concorrencia maxima.</item>
-    <item>Defina um default conservador e explique no codigo apenas se a escolha nao for obvia.</item>
-    <item>Integre o limite no DAG Executor sem quebrar a semantica de waves e dependencias.</item>
-    <item>Atualize a UI de configuracao apenas na medida necessaria para o usuario conseguir alterar esse valor.</item>
-    <item>Se existir legado de config, preserve compatibilidade e migracao coerente.</item>
-    <item>Atualize a README se a configuracao passar a fazer parte do contrato do produto.</item>
-  </instructions>
-
-  <constraints>
-    <item>Nao transforme a task em um scheduler completamente novo.</item>
-    <item>Nao introduza configuracao sem validacao ou sem default seguro.</item>
-    <item>Nao misture concorrencia com retry seletivo se nao for estritamente necessario.</item>
-  </constraints>
-
-  <acceptance_criteria>
-    <item>Existe um campo de config persistido para limite maximo de concorrencia.</item>
-    <item>O DAG Executor respeita esse limite durante a execucao.</item>
-    <item>Compatibilidade com config existente e mantida.</item>
-    <item>`npm run typecheck` passa.</item>
-  </acceptance_criteria>
-
-  <validation>
-    <item>Execute `npm run typecheck`.</item>
-    <item>Teste manualmente com valores baixos de concorrencia para verificar limitacao real de paralelismo.</item>
-  </validation>
-</task_prompt>
-```
-
-## Task 7: Aprofundar tratamento de erro em config e validacao de API [DONE]
-
-Implementado: `src/schemas/errors.ts` com tipos discriminados `ConfigErrorKind` (6 variantes) e `ApiErrorKind` (6 variantes) + funcoes `getConfigErrorMessage`/`getApiErrorMessage` para mensagens acionaveis. `use-config.ts` classifica erros via `classifyLoadError`/`classifyWriteError` (ENOENT, EACCES, SyntaxError, ZodError). `use-api-validation.ts` classifica erros via `classifyFetchError`/`classifyHttpError` (401/403, 429, 5xx, timeout, network). ConfigScreen exibe mensagens via `getApiErrorMessage`.
-
-Problema original:
-- `use-config` reduz diferentes falhas de leitura/parse para estados rasos.
-- `use-api-validation` diferencia pouco os erros de rede/autenticacao/limite e devolve mensagens genericas demais.
-
-Arquivos e contexto relevantes:
-- @CLAUDE.md
-- @docs/general/file-agent-patterns.md
-- @docs/general/context-building.md
-- @docs/general/context-building-2.md
-- @docs/general/prompt-engineering.md
-- @README.md
-- @src/hooks/use-config.ts
-- @src/hooks/use-api-validation.ts
-- @src/screens/config-screen.tsx
-- @src/app.tsx
-- @src/schemas/config.schema.ts
-
-Prompt XML:
-
-```xml
-<task_prompt>
-  <background_information>
-    O fluxo atual de configuracao funciona, mas trata erros de maneira superficial demais. Isso reduz observabilidade e piora a UX quando a config esta corrompida, a API key esta invalida, ha rate limit, timeout, erro de permissao ou falha temporaria de rede. A task deve aprofundar a classificacao de erro sem inflar a complexidade desnecessariamente.
-  </background_information>
-
-  <references>
-    <item>@CLAUDE.md</item>
-    <item>@docs/general/file-agent-patterns.md</item>
-    <item>@docs/general/context-building.md</item>
-    <item>@docs/general/context-building-2.md</item>
-    <item>@docs/general/prompt-engineering.md</item>
-    <item>@README.md</item>
-    <item>@src/hooks/use-config.ts</item>
-    <item>@src/hooks/use-api-validation.ts</item>
-    <item>@src/screens/config-screen.tsx</item>
-    <item>@src/app.tsx</item>
+    <item>@src/schemas/errors.ts</item>
     <item>@src/schemas/config.schema.ts</item>
   </references>
 
   <objective>
-    Melhorar o tratamento de erro de configuracao e validacao de API para que estados distintos sejam identificados e comunicados corretamente ao usuario. O objetivo nao e criar uma infraestrutura pesada de observabilidade, e sim distinguir erros relevantes de forma tipada, previsivel e com mensagens acionaveis.
+    Garantir que falhas de escrita da configuracao sejam percebidas e tratadas corretamente pelo usuario antes de o fluxo seguir. O estado de erro precisa ser visivel, acionavel e coerente com a classificacao tipada ja existente.
   </objective>
 
   <instructions>
-    <item>Modele erros de configuracao com granularidade suficiente para diferenciar arquivo ausente, JSON invalido, schema invalido, erro de permissao e falha de IO.</item>
-    <item>Modele erros de validacao de API com granularidade suficiente para diferenciar chave invalida, erro de rede, timeout, rate limit e indisponibilidade remota quando isso puder ser inferido com seguranca.</item>
-    <item>Propague esses estados para a UI de configuracao sem espalhar condicionais opacas.</item>
-    <item>Reutilize Zod e tipos discriminados sempre que fizer sentido.</item>
-    <item>Mantenha a experiencia de usuario enxuta: mensagens claras, sem despejar stack traces na tela.</item>
-    <item>Se alterar o shape da config em memoria, preserve compatibilidade com o contrato atual.</item>
+    <item>Mapeie o caminho atual entre ConfigScreen, App e saveConfig.</item>
+    <item>Garanta que o fluxo nao avance silenciosamente quando persistir a config falhar.</item>
+    <item>Reaproveite os tipos e mensagens de erro ja introduzidos em `schemas/errors.ts`.</item>
+    <item>Mantenha o fluxo feliz simples e sem regressao visual desnecessaria.</item>
+    <item>Se for necessario aguardar `saveConfig`, faca isso explicitamente e com tratamento de erro claro.</item>
   </instructions>
 
   <constraints>
-    <item>Nao transforme a task em sistema completo de telemetria.</item>
-    <item>Nao esconda erros diferentes sob o mesmo status generico.</item>
-    <item>Nao degrade o fluxo feliz de configuracao.</item>
+    <item>Nao esconder falhas de escrita atras de navegacao imediata.</item>
+    <item>Nao duplicar classificacao de erro fora do hook de config sem necessidade.</item>
+    <item>Nao degradar a UX do caminho feliz.</item>
   </constraints>
 
   <acceptance_criteria>
-    <item>Falhas de config relevantes sao distinguidas em estados tipados.</item>
-    <item>Falhas de validacao de API relevantes sao distinguidas em estados tipados.</item>
-    <item>A tela de configuracao apresenta mensagens acionaveis coerentes com cada caso.</item>
+    <item>Falhas de escrita de config aparecem de forma visivel ao usuario.</item>
+    <item>O app nao avanca de forma silenciosa quando salvar falha.</item>
+    <item>As mensagens exibidas sao coerentes com `ConfigErrorKind`.</item>
     <item>`npm run typecheck` passa.</item>
   </acceptance_criteria>
 
   <validation>
     <item>Execute `npm run typecheck`.</item>
-    <item>Teste manualmente ao menos um caso de config invalida e um caso de API key invalida.</item>
+    <item>Simule um erro de permissao ou escrita e confirme que a UI nao segue adiante silenciosamente.</item>
   </validation>
 </task_prompt>
 ```
 
-## Dependencias Entre Tasks
+## Dependencias Entre Problemas
 
 Dependencias fortes:
-- Task 4 depende parcialmente da Task 6 se voce quiser expor `maxConcurrency` via argumento de CLI. Se a Task 4 ficar limitada a `--help`, `--version`, `--task`, `--context`, `--planner` e `--worker`, ela pode ser feita antes.
+- Problema 1 e Problema 2 tocam o mesmo fluxo de bootstrap de CLI e estado inicial em @src/app.tsx. Vale resolver juntos ou em sequencia curta para evitar regressao cruzada.
+- Problema 5 depende parcialmente do mesmo fluxo de configuracao tocado pelo Problema 2, porque ambos encostam em persistencia e navegacao apos salvar config.
 
 Dependencias recomendadas de ordem:
-- Task 1 antes de todas as outras, para restaurar um baseline de validacao local com lint.
-- Task 7 antes da Task 4, se voce quiser que erros de argumentos/config aparecam de forma mais precisa no bootstrap do CLI.
-- Task 6 antes da Task 4, se flags de concorrencia fizerem parte do escopo do CLI.
-- Task 2 e Task 3 sao independentes entre si, mas ambas tocam o fluxo final de UX; vale sequenciar para evitar conflitos de estado em `src/app.tsx`.
-- Task 5 e independente das demais no plano tecnico, mas deve ser tratada depois do baseline de lint/typecheck estar verde para facilitar iteracao segura.
+- Problema 2 antes do Problema 5, para estabilizar a fronteira entre config de sessao e config persistida antes de tratar UX de erro de escrita.
+- Problema 1 pode ser feito junto com Problema 2, mas se for separado, faca Problema 1 primeiro para estabilizar o bootstrap de `cliArgs`.
+- Problema 4 e independente dos demais no nivel de dominio, mas toca fluxo final de execucao e resultado; melhor manter separado das correcoes de CLI/config.
+- Problema 3 e tecnicamente independente dos demais, desde que a base real do diff seja propagada de forma local e tipada.
 
 Ordem recomendada de execucao:
-1. ~~Task 1~~ [DONE]
-2. ~~Task 7~~ [DONE]
-3. ~~Task 6~~ [DONE]
-4. ~~Task 4~~ [DONE]
-5. ~~Task 2~~ [DONE]
-6. ~~Task 3~~ [DONE]
-7. ~~Task 5~~ [DONE]
-
-Todas as 7 tasks foram concluidas.
+1. Problema 1
+2. Problema 2
+3. Problema 5
+4. Problema 3
+5. Problema 4

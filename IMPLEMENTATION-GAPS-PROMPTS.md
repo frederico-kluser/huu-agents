@@ -1,18 +1,12 @@
-# Problemas Restantes e Prompts de Correcao
+# Tasks Novas e Prompts de Correcao
 
-Este documento foi refeito do zero e agora contem apenas os problemas que ainda restam no codigo atual.
+Este documento contem apenas as tasks novas para corrigir os problemas ainda abertos no codigo atual.
 
 Escopo:
 - Inclui somente gaps confirmados por revisao de codigo e validacao local.
-- Nao repete tasks ja consideradas corretas.
-- Cada problema abaixo tem um prompt XML proprio, pronto para execucao.
+- Cada task abaixo tem um prompt XML proprio, pronto para execucao.
 
-Status fora deste documento:
-- A antiga Task 1 parece correta.
-- A antiga Task 5 parece correta.
-- A antiga Task 6 parece correta.
-
-## Problema 1: `--task` nao funciona como o contrato promete
+## Task 1: corrigir o fluxo de `--task`
 
 Diagnostico:
 - O contrato atual de CLI diz que `--task` pula a tela de input da macro-task.
@@ -86,7 +80,7 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Problema 2: overrides de modelo por CLI estao vazando para a config persistida
+## Task 2: separar overrides de CLI da config persistida
 
 Diagnostico:
 - A README afirma que `--planner` e `--worker` valem apenas para a sessao atual.
@@ -159,7 +153,7 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Problema 3: diff final continua hardcoded em `main`
+## Task 3: remover `main` hardcoded do diff final
 
 Diagnostico:
 - O diff final real existe, mas ainda usa `main...branch` diretamente.
@@ -228,7 +222,7 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Problema 4: blocked e failed continuam misturados no resumo final
+## Task 4: separar `blocked` de `failed` no resultado final
 
 Diagnostico:
 - O retry seletivo existe, mas o pipeline ainda trata dependentes bloqueados como se fossem falhas diretas.
@@ -277,7 +271,7 @@ Prompt XML:
     <item>Defina um modelo coerente para representar blocked, incluindo schema e resumo final.</item>
     <item>Atualize a ResultScreen para refletir os estados reais e nao inferir bloqueio a partir de pending.</item>
     <item>Mantenha compatibilidade com o retry seletivo ja existente.</item>
-    <item>Se for necessario adicionar evento ou status novo, faça isso com o menor impacto tipado possivel.</item>
+    <item>Se for necessario adicionar evento ou status novo, faca isso com o menor impacto tipado possivel.</item>
   </instructions>
 
   <constraints>
@@ -300,7 +294,7 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Problema 5: erros de escrita de config nao aparecem de forma confiavel para o usuario
+## Task 5: tornar falhas de escrita de config visiveis
 
 Diagnostico:
 - A classificacao de erros de config melhorou, mas falhas de escrita ainda podem ficar invisiveis.
@@ -372,21 +366,21 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Dependencias Entre Problemas
+## Dependencias Entre Tasks
 
 Dependencias fortes:
-- Problema 1 e Problema 2 tocam o mesmo fluxo de bootstrap de CLI e estado inicial em @src/app.tsx. Vale resolver juntos ou em sequencia curta para evitar regressao cruzada.
-- Problema 5 depende parcialmente do mesmo fluxo de configuracao tocado pelo Problema 2, porque ambos encostam em persistencia e navegacao apos salvar config.
+- Task 1 e Task 2 tocam o mesmo fluxo de bootstrap de CLI e estado inicial em @src/app.tsx. Vale resolver juntas ou em sequencia curta para evitar regressao cruzada.
+- Task 5 depende parcialmente do mesmo fluxo de configuracao tocado pela Task 2, porque ambas encostam em persistencia e navegacao apos salvar config.
 
 Dependencias recomendadas de ordem:
-- Problema 2 antes do Problema 5, para estabilizar a fronteira entre config de sessao e config persistida antes de tratar UX de erro de escrita.
-- Problema 1 pode ser feito junto com Problema 2, mas se for separado, faca Problema 1 primeiro para estabilizar o bootstrap de `cliArgs`.
-- Problema 4 e independente dos demais no nivel de dominio, mas toca fluxo final de execucao e resultado; melhor manter separado das correcoes de CLI/config.
-- Problema 3 e tecnicamente independente dos demais, desde que a base real do diff seja propagada de forma local e tipada.
+- Task 2 antes da Task 5, para estabilizar a fronteira entre config de sessao e config persistida antes de tratar UX de erro de escrita.
+- Task 1 pode ser feita junto com a Task 2, mas se for separado, faca a Task 1 primeiro para estabilizar o bootstrap de `cliArgs`.
+- Task 4 e independente das demais no nivel de dominio, mas toca fluxo final de execucao e resultado; melhor manter separada das correcoes de CLI/config.
+- Task 3 e tecnicamente independente das demais, desde que a base real do diff seja propagada de forma local e tipada.
 
 Ordem recomendada de execucao:
-1. Problema 1
-2. Problema 2
-3. Problema 5
-4. Problema 3
-5. Problema 4
+1. Task 1
+2. Task 2
+3. Task 5
+4. Task 3
+5. Task 4

@@ -7,7 +7,7 @@ import { getPlannerModels, getWorkerModels, findModel, formatPrice } from '../da
 import type { ModelEntry } from '../data/models.js';
 import type { Config } from '../schemas/config.schema.js';
 
-type ConfigStep = 'api-key' | 'planner-model' | 'worker-model';
+type ConfigStep = 'api-key' | 'planner-model' | 'worker-model' | 'concurrency';
 
 interface ConfigScreenProps {
   readonly onComplete: (config: Config) => void;
@@ -60,6 +60,8 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
   const [step, setStep] = useState<ConfigStep>(initialStep);
   const [apiKey, setApiKey] = useState(existingConfig?.openrouterApiKey ?? '');
   const [plannerModelId, setPlannerModelId] = useState(existingConfig?.selectedAgents?.planner ?? '');
+  const [workerModelId, setWorkerModelId] = useState(existingConfig?.selectedAgents?.worker ?? '');
+  const [concurrency, setConcurrency] = useState(String(existingConfig?.maxConcurrency ?? 4));
   const { validation, validate } = useApiValidation();
 
   const handleApiKeySubmit = useCallback((value: string) => {
@@ -77,14 +79,22 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
   const worktreeBasePath = existingConfig?.worktreeBasePath ?? '.pi-dag-worktrees';
 
   const handleWorkerSelect = useCallback((model: ModelEntry) => {
+    setWorkerModelId(model.id);
+    setStep('concurrency');
+  }, []);
+
+  const handleConcurrencySubmit = useCallback((value: string) => {
+    const parsed = parseInt(value, 10);
+    const valid = !isNaN(parsed) && parsed >= 1 && parsed <= 16 ? parsed : 4;
     onComplete({
       openrouterApiKey: apiKey,
       plannerModel: plannerModelId,
-      workerModel: model.id,
-      selectedAgents: { planner: plannerModelId, worker: model.id },
+      workerModel: workerModelId,
+      selectedAgents: { planner: plannerModelId, worker: workerModelId },
+      maxConcurrency: valid,
       worktreeBasePath,
     });
-  }, [apiKey, plannerModelId, worktreeBasePath, onComplete]);
+  }, [apiKey, plannerModelId, workerModelId, worktreeBasePath, onComplete]);
 
   // Step: API Key
   if (step === 'api-key') {
@@ -123,14 +133,37 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
   }
 
   // Step: Worker Model
+  if (step === 'worker-model') {
+    return (
+      <Box flexDirection="column">
+        <ModelSummary label="Planner" modelId={plannerModelId} />
+        <ModelTable
+          models={getWorkerModels()}
+          onSelect={handleWorkerSelect}
+          title="Modelo Worker (execucao rapida)"
+        />
+      </Box>
+    );
+  }
+
+  // Step: Concurrency
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" padding={1}>
       <ModelSummary label="Planner" modelId={plannerModelId} />
-      <ModelTable
-        models={getWorkerModels()}
-        onSelect={handleWorkerSelect}
-        title="Modelo Worker (execucao rapida)"
-      />
+      <ModelSummary label="Worker" modelId={workerModelId} />
+      <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column" marginTop={1}>
+        <Text bold color="cyan">Concorrencia maxima</Text>
+        <Text dimColor>Workers paralelos por wave (1-16, padrao: 4)</Text>
+        <Box marginTop={1}>
+          <Text>Max concorrencia: </Text>
+          <TextInput
+            value={concurrency}
+            onChange={setConcurrency}
+            onSubmit={handleConcurrencySubmit}
+            placeholder="4"
+          />
+        </Box>
+      </Box>
     </Box>
   );
 };

@@ -16,11 +16,15 @@ export const SelectedAgentsSchema = z.object({
 
 export type SelectedAgents = z.infer<typeof SelectedAgentsSchema>;
 
+/** Default conservador: 4 worktrees simultâneas equilibra paralelismo e carga de I/O/API */
+const DEFAULT_MAX_CONCURRENCY = 4;
+
 /**
  * Schema bruto do arquivo de configuração (antes do transform).
  * Aceita tanto formato legado (plannerModel/workerModel) quanto
  * formato novo (selectedAgents), ou ambos.
  */
+
 const RawConfigSchema = z.object({
   openrouterApiKey: z
     .string()
@@ -38,6 +42,13 @@ const RawConfigSchema = z.object({
     .describe('(Legado) LLM model identifier for worker agents'),
   selectedAgents: SelectedAgentsSchema.optional()
     .describe('Agentes selecionados para planner e worker'),
+  maxConcurrency: z
+    .number()
+    .int()
+    .min(1)
+    .max(16)
+    .default(DEFAULT_MAX_CONCURRENCY)
+    .describe('Máximo de workers executando em paralelo por wave'),
   worktreeBasePath: z
     .string()
     .min(1)
@@ -81,6 +92,7 @@ export const ConfigSchema = RawConfigSchema.transform((raw) => {
     plannerModel: planner,
     workerModel: worker,
     selectedAgents: { planner, worker },
+    maxConcurrency: raw.maxConcurrency,
     worktreeBasePath: raw.worktreeBasePath,
   };
 });

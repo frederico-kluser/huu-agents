@@ -146,6 +146,19 @@ TypeScript strict, sem `any`, TSDoc com `@throws` e `@example`, imutabilidade, Z
 
 Agentes rodando em paralelo na mesma working tree enfrentam race conditions de I/O e lock do index Git. Worktrees são containers temporários baratos, isolados no filesystem, com merge trivial e limpeza segura.
 
+## Configuracao
+
+A configuracao e persistida em `~/.pi-dag-cli.json` e inclui:
+
+| Campo | Tipo | Default | Descricao |
+|-------|------|---------|-----------|
+| `openrouterApiKey` | string | — | Chave de API do OpenRouter |
+| `selectedAgents` | `{ planner, worker }` | GPT-4.1 / GPT-4.1-mini | Modelos para planner e workers |
+| `maxConcurrency` | number (1-16) | 4 | Workers paralelos por wave do DAG |
+| `worktreeBasePath` | string | `.pi-dag-worktrees` | Diretorio base para worktrees |
+
+`maxConcurrency` limita quantos workers executam simultaneamente dentro de cada wave. Valores baixos (1-2) reduzem carga no sistema e uso de API; valores altos (8-16) maximizam paralelismo em DAGs grandes.
+
 ## Pre-requisitos
 
 - Node.js >= 20

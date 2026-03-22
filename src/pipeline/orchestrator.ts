@@ -167,6 +167,13 @@ function createExecutionEmitter(
     onStatusChange(null);
   });
 
+  emitter.on('merge-resolved', ({ nodeId, strategy, conflictFiles }: { nodeId: string; strategy: string; conflictFiles?: readonly string[] }) => {
+    const detail = strategy === 'theirs' && conflictFiles?.length
+      ? ` — ${conflictFiles.length} arquivo(s) resolvido(s) via last-writer-wins`
+      : '';
+    addLog(logs, nodeId, `Merge: estratégia '${strategy}'${detail}`);
+  });
+
   return emitter;
 }
 

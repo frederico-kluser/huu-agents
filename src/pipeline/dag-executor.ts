@@ -2,7 +2,7 @@ import type { EventEmitter } from 'node:events';
 
 import type { DAG, DAGNode } from '../schemas/dag.schema.js';
 import type { WorkerResult } from '../schemas/worker-result.schema.js';
-import { merge } from '../git/git-wrapper.js';
+import { mergeWithResolution, type MergeStrategy } from '../git/conflict-resolver.js';
 import { createWorktree, removeWorktree } from '../git/worktree-manager.js';
 
 // --- Tipos públicos ---
@@ -28,6 +28,7 @@ export interface DAGExecutorEvents {
   'node-started': [{ readonly nodeId: string }];
   'node-completed': [{ readonly nodeId: string; readonly result: WorkerResult }];
   'node-failed': [{ readonly nodeId: string; readonly error: string }];
+  'merge-resolved': [{ readonly nodeId: string; readonly strategy: MergeStrategy; readonly conflictFiles?: readonly string[] }];
 }
 
 // --- Topological Sort (Kahn's algorithm) ---
@@ -169,14 +170,20 @@ export const executeDAG = async (
       // Merge subtask branch na branch base da task.
       // Workers 'partial' com commitHash são mergeados intencionalmente —
       // mudanças parciais são preservadas e o node é marcado como completed.
+      // Usa mergeWithResolution: merge normal → fallback -X theirs → erro detalhado.
       if (result.commitHash) {
-        const mergeResult = await merge(
+        const mergeResult = await mergeWithResolution(
           `task-${taskTimestamp}`,
           [wtResult.value.branch],
         );
         if (!mergeResult.ok) {
           throw new Error(`Merge falhou: ${mergeResult.error.message}`);
         }
+        emitter?.emit('merge-resolved', {
+          nodeId,
+          strategy: mergeResult.value.strategy,
+          conflictFiles: mergeResult.value.conflictLog?.files,
+        });
       }
 
       completed.add(nodeId);

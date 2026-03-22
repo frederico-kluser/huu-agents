@@ -11,6 +11,7 @@ import { useConfig } from './hooks/use-config.js';
 import { runPipeline, retryPipeline, type PipelineProgress } from './pipeline/orchestrator.js';
 import type { CliArgs } from './cli-args.js';
 import type { Config } from './schemas/config.schema.js';
+import { getConfigErrorMessage } from './schemas/errors.js';
 import type { DAG, DAGNode } from './schemas/dag.schema.js';
 import type { WorkerResult } from './schemas/worker-result.schema.js';
 
@@ -241,7 +242,7 @@ export const App = ({ cliArgs }: AppProps) => {
   if (screen === 'config') {
     return (
       <Box flexDirection="column">
-        {configState.status === 'error' && <Box padding={1}><Text color="red">Erro: {configState.error}</Text></Box>}
+        {configState.status === 'error' && <Box padding={1}><Text color="red">{getConfigErrorMessage(configState.error)}</Text></Box>}
         <ConfigScreen onComplete={handleConfigComplete} />
       </Box>
     );

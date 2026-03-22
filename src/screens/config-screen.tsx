@@ -6,6 +6,7 @@ import { ModelTable } from '../components/model-table.js';
 import { getPlannerModels, getWorkerModels, findModel, formatPrice } from '../data/models.js';
 import type { ModelEntry } from '../data/models.js';
 import type { Config } from '../schemas/config.schema.js';
+import { getApiErrorMessage } from '../schemas/errors.js';
 
 type ConfigStep = 'api-key' | 'planner-model' | 'worker-model' | 'concurrency';
 
@@ -21,7 +22,7 @@ interface ConfigScreenProps {
 const ValidationFeedback = ({ validation }: { readonly validation: ValidationState }) => {
   if (validation.status === 'validating') return <Text color="yellow">Validando...</Text>;
   if (validation.status === 'valid') return <Text color="green">API key valida</Text>;
-  if (validation.status === 'invalid') return <Text color="red">Erro: {validation.error}</Text>;
+  if (validation.status === 'invalid') return <Text color="red">{getApiErrorMessage(validation.error)}</Text>;
   return null;
 };
 

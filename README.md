@@ -4,6 +4,14 @@
 
 Combina a filosofia YOLO minimalista do [Pi Coding Agent](https://github.com/badlogic/pi-mono), orquestração via LangChain.js, e padrões de engenharia de contexto e prompting para produção.
 
+## Como rodar
+
+```bash
+npm install
+npm run build
+node dist/cli.js
+```
+
 ## Stack
 
 | Camada | Tecnologia | Versão |
@@ -12,17 +20,17 @@ Combina a filosofia YOLO minimalista do [Pi Coding Agent](https://github.com/bad
 | Linguagem | TypeScript (strict) | ES2022, NodeNext |
 | UI Terminal | Ink + React | v6 + React 19 |
 | Schemas | Zod | validação de DAG, config, resultados |
-| Orquestração | LangChain.js + LangGraph.js | v1.0+ |
+| Orquestração | LangChain.js | v1.0+ |
 | Agentes Worker | Pi Coding Agent SDK | v0.60.0+ |
-| Multi-provider LLM | OpenRouter | 2K+ modelos |
+| Multi-provider LLM | OpenRouter | 18 modelos configuráveis |
 | Isolamento | Git Worktrees | nativo |
 
 ## Arquitetura
 
-Dois tiers de modelos independentes via OpenRouter:
+Dois tiers de modelos independentes, ambos selecionáveis pelo usuário via tabela filtrável com 18 modelos (preço, velocidade, SWE-Bench, perf/cost ratio):
 
-1. **Planner (Arquiteto):** Modelo de raciocínio pesado para task decomposition. Produz DAG Zod-validado com nodes atômicos e dependências. Usa sub-agente ReAct Explorer quando precisa de contexto adicional do codebase.
-2. **Workers (Operários):** Modelos rápidos que executam subtasks em worktrees isoladas, com system prompts adaptados por provider (XML para Claude, Markdown para GPT) e padrões agent-friendly embutidos.
+1. **Planner (Arquiteto):** Modelo de raciocínio pesado para task decomposition. Produz DAG Zod-validado. Usa sub-agente ReAct Explorer quando precisa de contexto adicional.
+2. **Workers (Operários):** Modelos rápidos que executam subtasks em worktrees isoladas. System prompts adaptados por provider (XML Claude, Markdown GPT). Auto-commit + merge automático.
 
 ### Pipeline integrado
 
@@ -47,32 +55,46 @@ Usuário → Ink TUI (config → contexto → macro-task)
               Result Screen (resumo + retry falhados + diff)
 ```
 
-## Como rodar
+### Seleção de modelos
 
-```bash
-npm install
-npm run build
-node dist/cli.js
+StatusBar sempre visível mostra modelos atuais. Atalho `[m]` abre seleção a qualquer momento sem perder estado.
+
 ```
+┌───────────────────────────────────────────────────────────────────────┐
+│ Planner: Gemini 3.1 Pro ($2/$12)  |  Worker: MiMo-V2-Flash ($0.1/$0.3)  |  [m] modelos │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+18 modelos de 10 providers com filtro, velocidade, preço e benchmarks:
+
+| Tier | Modelos | Range preço (in/out) |
+|------|---------|---------------------|
+| Planner | Opus 4.6, GPT-5.4, Gemini 3.1 Pro, Codex 5.3 | $1.75-$5.00 / $12-$25 |
+| Both | MiniMax M2.5, Sonnet 4.6, Haiku 4.5, Kimi K2.5, DeepSeek V3.2 | $0.15-$3.00 / $0.42-$15 |
+| Worker | MiMo-V2, Step 3.5, Devstral S2, Gemini Flash, Grok, Qwen3 + 3 mais | $0.10-$0.50 / $0.30-$3.00 |
 
 ## Estrutura do projeto
 
 ```
 src/
 ├── cli.tsx                          # Entry point
-├── app.tsx                          # Router de telas (state machine)
+├── app.tsx                          # Router de telas + StatusBar + [m]
+├── data/
+│   └── models.ts                    # Catálogo de 18 modelos (preço, bench, speed)
 ├── schemas/
 │   ├── dag.schema.ts                # DAG output do Planner (Zod)
 │   ├── config.schema.ts             # ~/.pi-dag-cli.json (Zod)
 │   └── worker-result.schema.ts      # Resultado de cada Worker (Zod)
 ├── screens/
-│   ├── config-screen.tsx            # Config API key + modelos
+│   ├── config-screen.tsx            # Config API key + seleção via ModelTable
 │   ├── context-screen.tsx           # Seleção de arquivos/dirs
 │   ├── task-screen.tsx              # Input da macro-task
 │   ├── dag-view-screen.tsx          # Visualização do DAG
 │   ├── execution-screen.tsx         # Dashboard de execução real-time
 │   └── result-screen.tsx            # Resultado final + retry
 ├── components/
+│   ├── model-table.tsx              # Tabela filtrável de modelos
+│   ├── status-bar.tsx               # Barra de modelos atuais
 │   ├── dag-node-row.tsx             # Linha de nó do DAG
 │   ├── tree-node.tsx                # Nó da árvore de arquivos
 │   └── worker-log.tsx               # Log streaming por worker
@@ -105,11 +127,11 @@ src/
     └── path-guard.ts                # Proteção contra path traversal
 ```
 
-35 arquivos, ~4.500 LOC (média ~130 LOC/arquivo).
+38 arquivos, ~4.800 LOC (média ~126 LOC/arquivo).
 
-## Padrões de código (agent-friendly)
+## Padrões de código
 
-Todo código da CLI — e todo código que os Workers geram — segue `docs/general/file-agent-patterns.md`:
+Segue `docs/general/file-agent-patterns.md`:
 
 | Métrica | Alvo | Limite |
 |---------|------|--------|
@@ -122,30 +144,10 @@ TypeScript strict, sem `any`, TSDoc com `@throws` e `@example`, imutabilidade, Z
 
 ## Por que Git Worktrees?
 
-Agentes rodando em paralelo na mesma working tree enfrentam:
-- **Race conditions de I/O:** arquivos salvos parcialmente por um agente são lidos por outro
-- **Lock do index Git:** `git lock` bloqueia operações concorrentes de staging
-
-Worktrees são containers temporários baratos, isolados no filesystem, com merge trivial e limpeza segura.
-
-## Documentação de referência
-
-| Doc | Papel |
-|-----|-------|
-| `docs/general/file-agent-patterns.md` | Métricas de código — governa CLI + Workers |
-| `docs/general/prompt-engineering.md` | Anti-patterns e best practices de prompting |
-| `docs/general/prompts-guide.md` | System prompts para automação (5 componentes) |
-| `docs/general/context-building.md` | Engenharia de contexto em 5 camadas |
-| `docs/general/story-breaking.md` | Framework de task decomposition |
-| `docs/general/ink.md` | Ink v6 + React 19 no terminal |
-| `docs/langchain/ReAct-langchain-tec-guide.md` | Implementação do Explorer |
-| `docs/langchain/langchain-models-2026.md` | Catálogo de modelos 2025-2026 |
-| `docs/langchain/langchain-langgraph-production.md` | Orquestração do pipeline |
-| `docs/pi/pi-agent-nodejs.md` | Pi SDK para Node.js |
-| `docs/pi/pi-agent-anatomia.md` | Anatomia do Pi (hooks, loop, tools) |
+Agentes rodando em paralelo na mesma working tree enfrentam race conditions de I/O e lock do index Git. Worktrees são containers temporários baratos, isolados no filesystem, com merge trivial e limpeza segura.
 
 ## Pre-requisitos
 
 - Node.js >= 20
-- Git >= 2.5 (suporte a worktrees)
+- Git >= 2.5
 - Chave de API do OpenRouter

@@ -224,9 +224,11 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Task 4: Adicionar argumentos reais de CLI
+## Task 4: Adicionar argumentos reais de CLI [DONE]
 
-Problema atual:
+Implementado: `src/cli-args.ts` com parsing via `node:util/parseArgs` + validacao Zod. Flags: `--help`, `--version`, `--task`, `--context`, `--planner`, `--worker`. Precedencia CLI > config persistida > defaults. `App` aceita `cliArgs` como props e pula telas conforme flags fornecidas. README atualizada com documentacao dos argumentos.
+
+Problema original:
 - O entrypoint apenas renderiza a TUI; nao ha parsing de argumentos como task inicial, arquivos de contexto, modelos, help ou version.
 
 Arquivos e contexto relevantes:
@@ -298,9 +300,11 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Task 5: Integrar resolvedor avancado de conflito ao executor
+## Task 5: Integrar resolvedor avancado de conflito ao executor [DONE]
 
-Problema atual:
+Implementado: `dag-executor.ts` agora usa `mergeWithResolution` em vez de `merge` simples. Estrategia em duas etapas: merge normal → fallback `-X theirs` (last writer wins) → erro detalhado. Novo evento `merge-resolved` emitido com estrategia e arquivos conflitantes. Orchestrator loga a estrategia usada para diagnostico.
+
+Problema original:
 - O projeto possui `mergeWithResolution` em `src/git/conflict-resolver.ts`, mas o `dag-executor` ainda usa merge simples.
 - Existe tambem a oportunidade de avaliar uma etapa mais inteligente de commit/merge assistida por agente Pi apenas quando o merge normal falhar, em vez de alterar o worker para assumir responsabilidades que hoje pertencem ao orquestrador.
 
@@ -376,9 +380,11 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Task 6: Adicionar limite configuravel de concorrencia
+## Task 6: Adicionar limite configuravel de concorrencia [DONE]
 
-Problema atual:
+Implementado: campo `maxConcurrency` no `ConfigSchema` (Zod, int 1-16, default 4). `runWithConcurrency` no `dag-executor.ts` como semaforo cooperativo que limita Promises ativas por wave. `executeDAG` recebe `maxConcurrency` como parametro. Orchestrator passa `config.maxConcurrency`. ConfigScreen inclui etapa `'concurrency'` para o usuario ajustar o valor. README atualizada.
+
+Problema original:
 - O executor processa por waves, mas nao existe um limite explicito e configuravel de concorrencia para controlar quantos workers rodam ao mesmo tempo.
 
 Arquivos e contexto relevantes:
@@ -447,9 +453,11 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Task 7: Aprofundar tratamento de erro em config e validacao de API
+## Task 7: Aprofundar tratamento de erro em config e validacao de API [DONE]
 
-Problema atual:
+Implementado: `src/schemas/errors.ts` com tipos discriminados `ConfigErrorKind` (6 variantes) e `ApiErrorKind` (6 variantes) + funcoes `getConfigErrorMessage`/`getApiErrorMessage` para mensagens acionaveis. `use-config.ts` classifica erros via `classifyLoadError`/`classifyWriteError` (ENOENT, EACCES, SyntaxError, ZodError). `use-api-validation.ts` classifica erros via `classifyFetchError`/`classifyHttpError` (401/403, 429, 5xx, timeout, network). ConfigScreen exibe mensagens via `getApiErrorMessage`.
+
+Problema original:
 - `use-config` reduz diferentes falhas de leitura/parse para estados rasos.
 - `use-api-validation` diferencia pouco os erros de rede/autenticacao/limite e devolve mensagens genericas demais.
 
@@ -535,9 +543,11 @@ Dependencias recomendadas de ordem:
 
 Ordem recomendada de execucao:
 1. ~~Task 1~~ [DONE]
-2. Task 7
-3. Task 6
-4. Task 4
+2. ~~Task 7~~ [DONE]
+3. ~~Task 6~~ [DONE]
+4. ~~Task 4~~ [DONE]
 5. ~~Task 2~~ [DONE]
 6. ~~Task 3~~ [DONE]
-7. Task 5
+7. ~~Task 5~~ [DONE]
+
+Todas as 7 tasks foram concluidas.

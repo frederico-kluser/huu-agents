@@ -55,6 +55,10 @@ export const getConfigErrorMessage = (error: ConfigErrorKind): string => {
       return `Erro ao ler ${error.path}: ${error.detail}`;
     case 'write_error':
       return `Erro ao salvar ${error.path}: ${error.detail}`;
+    default: {
+      const _exhaustive: never = error;
+      return _exhaustive;
+    }
   }
 };
 
@@ -84,5 +88,9 @@ export const getApiErrorMessage = (error: ApiErrorKind): string => {
       return `Falha na conexão com OpenRouter: ${error.detail}`;
     case 'server_error':
       return `OpenRouter retornou erro ${error.statusCode}. O serviço pode estar indisponível — tente novamente em breve.`;
+    default: {
+      const _exhaustive: never = error;
+      return _exhaustive;
+    }
   }
 };

@@ -14,6 +14,7 @@ import { retryWorker, type RetryConfig } from './retry-handler.js';
 import { runWorker, type WorkerProgressEvent } from '../agents/worker-runner.js';
 import { generateWorkerPrompt } from '../prompts/worker.prompt.js';
 import { createBranch, execGit } from '../git/git-wrapper.js';
+import type { MergeStrategy } from '../git/conflict-resolver.js';
 import type { Config } from '../schemas/config.schema.js';
 import type { DAG, DAGNode } from '../schemas/dag.schema.js';
 import type { WorkerResult } from '../schemas/worker-result.schema.js';
@@ -167,7 +168,7 @@ function createExecutionEmitter(
     onStatusChange(null);
   });
 
-  emitter.on('merge-resolved', ({ nodeId, strategy, conflictFiles }: { nodeId: string; strategy: string; conflictFiles?: readonly string[] }) => {
+  emitter.on('merge-resolved', ({ nodeId, strategy, conflictFiles }: { nodeId: string; strategy: MergeStrategy; conflictFiles?: readonly string[] }) => {
     const detail = strategy === 'theirs' && conflictFiles?.length
       ? ` — ${conflictFiles.length} arquivo(s) resolvido(s) via last-writer-wins`
       : '';

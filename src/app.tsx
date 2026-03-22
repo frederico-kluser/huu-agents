@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { ConfigScreen } from './screens/config-screen.js';
 import { ContextScreen } from './screens/context-screen.js';
@@ -9,6 +9,7 @@ import { DiffScreen } from './screens/diff-screen.js';
 import { StatusBar } from './components/status-bar.js';
 import { useConfig } from './hooks/use-config.js';
 import { runPipeline, retryPipeline, type PipelineProgress } from './pipeline/orchestrator.js';
+import type { CliArgs } from './cli-args.js';
 import type { Config } from './schemas/config.schema.js';
 import type { DAG, DAGNode } from './schemas/dag.schema.js';
 import type { WorkerResult } from './schemas/worker-result.schema.js';
@@ -41,6 +42,36 @@ interface PipelineState {
   readonly retryContext: RetryContext | null;
 }
 
+interface AppProps {
+  readonly cliArgs?: CliArgs;
+}
+
+/**
+ * Aplica overrides de modelo CLI sobre a config persistida.
+ * Precedencia: CLI flags > config persistida > defaults.
+ */
+const applyModelOverrides = (config: Config, cliArgs?: CliArgs): Config => {
+  if (!cliArgs?.planner && !cliArgs?.worker) return config;
+  const planner = cliArgs.planner ?? config.selectedAgents.planner;
+  const worker = cliArgs.worker ?? config.selectedAgents.worker;
+  return {
+    ...config,
+    plannerModel: planner,
+    workerModel: worker,
+    selectedAgents: { planner, worker },
+  };
+};
+
+/**
+ * Determina a tela inicial apos config carregada, considerando CLI args.
+ * --context fornecido: pula para task. --task + --context: pula para executing.
+ */
+const resolveInitialScreen = (cliArgs?: CliArgs): Screen => {
+  if (cliArgs?.task && cliArgs.context?.length) return 'executing';
+  if (cliArgs?.context?.length) return 'task';
+  return 'context';
+};
+
 const INITIAL_STATE: PipelineState = {
   config: null, contextFiles: [], macroTask: '',
   startTime: 0, result: null, progress: null, previousScreen: null, retryContext: null,
@@ -49,24 +80,36 @@ const INITIAL_STATE: PipelineState = {
 /**
  * Componente raiz do Pi DAG CLI.
  * State machine: loading → config → context → task → executing → result.
- * StatusBar visível em todas as telas exceto loading/config.
- * [m] abre seleção de modelos sem resetar estado.
+ * Aceita cliArgs para pular telas e overridar modelos.
+ * StatusBar visivel em todas as telas exceto loading/config.
+ * [m] abre selecao de modelos sem resetar estado.
  *
+ * @param props.cliArgs - Argumentos CLI parseados (opcional)
  * @example
  * ```tsx
- * render(<App />);
+ * render(<App cliArgs={{ task: "Refatorar auth", context: ["src/auth"] }} />);
  * ```
  */
-export const App = () => {
+export const App = ({ cliArgs }: AppProps) => {
   const { state: configState, saveConfig } = useConfig();
   const [screen, setScreen] = useState<Screen>(
     configState.status === 'loading' ? 'loading' : 'config',
   );
   const [pipeline, setPipeline] = useState<PipelineState>(INITIAL_STATE);
+  const cliAppliedRef = useRef(false);
 
   if (configState.status === 'loaded' && screen === 'loading') {
-    setScreen('context');
-    setPipeline((prev) => ({ ...prev, config: configState.config }));
+    const mergedConfig = applyModelOverrides(configState.config, cliArgs);
+    const targetScreen = resolveInitialScreen(cliArgs);
+    setScreen(targetScreen);
+    setPipeline((prev) => ({
+      ...prev,
+      config: mergedConfig,
+      contextFiles: cliArgs?.context ?? prev.contextFiles,
+      macroTask: cliArgs?.task ?? prev.macroTask,
+      startTime: targetScreen === 'executing' ? Date.now() : prev.startTime,
+    }));
+    cliAppliedRef.current = true;
   }
   if ((configState.status === 'missing' || configState.status === 'error') && screen === 'loading') {
     setScreen('config');
@@ -81,10 +124,19 @@ export const App = () => {
   });
 
   const handleConfigComplete = useCallback((config: Config) => {
-    void saveConfig(config);
-    setPipeline((prev) => ({ ...prev, config }));
-    setScreen('context');
-  }, [saveConfig]);
+    const mergedConfig = applyModelOverrides(config, cliArgs);
+    void saveConfig(mergedConfig);
+    const targetScreen = cliAppliedRef.current ? 'context' : resolveInitialScreen(cliArgs);
+    setPipeline((prev) => ({
+      ...prev,
+      config: mergedConfig,
+      contextFiles: !cliAppliedRef.current && cliArgs?.context ? cliArgs.context : prev.contextFiles,
+      macroTask: !cliAppliedRef.current && cliArgs?.task ? cliArgs.task : prev.macroTask,
+      startTime: targetScreen === 'executing' ? Date.now() : prev.startTime,
+    }));
+    cliAppliedRef.current = true;
+    setScreen(targetScreen);
+  }, [saveConfig, cliArgs]);
 
   const handleModelChange = useCallback((config: Config) => {
     void saveConfig(config);

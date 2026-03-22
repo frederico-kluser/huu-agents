@@ -12,6 +12,50 @@ npm run build
 node dist/cli.js
 ```
 
+## Argumentos CLI
+
+O modo interativo (TUI) continua sendo o default. Flags permitem bootstrap rapido e automacao.
+
+```
+USO:
+  pi-dag [opcoes]
+
+OPCOES:
+  -h, --help               Mostra ajuda e sai
+  -v, --version            Mostra a versao e sai
+  -t, --task <texto>       Macro-task a ser decomposta (pula tela de input)
+  -c, --context <caminhos> Arquivos/dirs de contexto, separados por virgula
+      --planner <modelo>   Modelo para o planner (override config persistida)
+      --worker <modelo>    Modelo para os workers (override config persistida)
+```
+
+### Precedencia
+
+```
+Flags CLI > config persistida (~/.pi-dag-cli.json) > defaults
+```
+
+Flags de modelo (`--planner`, `--worker`) sobrescrevem a config persistida apenas para a sessao atual — nao alteram o arquivo de configuracao.
+
+### Exemplos
+
+```bash
+# Modo interativo (default)
+pi-dag
+
+# Pular direto para execucao com task e contexto
+pi-dag --task "Adicionar autenticacao JWT" --context src/auth,src/middleware
+
+# Apenas pre-configurar contexto, digitar task interativamente
+pi-dag -c src/payments,src/utils
+
+# Override de modelos para uma sessao
+pi-dag --planner google/gemini-3.1-pro --worker xiaomi/mimo-v2-flash
+
+# Automacao em script
+pi-dag -t "Corrigir bug #42" -c src/handlers --planner openai/gpt-5.4
+```
+
 ## Stack
 
 | Camada | Tecnologia | Versão |

@@ -294,7 +294,7 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Task 5: tornar falhas de escrita de config visiveis
+## Task 5: tornar falhas de escrita de config visiveis — DONE
 
 Diagnostico:
 - A classificacao de erros de config melhorou, mas falhas de escrita ainda podem ficar invisiveis.

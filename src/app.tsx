@@ -126,9 +126,12 @@ export const App = ({ cliArgs }: AppProps) => {
     }
   });
 
-  const handleConfigComplete = useCallback((config: Config) => {
-    // Persistir config original (sem overrides CLI — esses sao de sessao)
-    void saveConfig(config);
+  const handleConfigComplete = useCallback(async (config: Config) => {
+    // Persistir config original (sem overrides CLI — esses sao de sessao).
+    // Aguarda o resultado: se falhar, nao navega — o erro aparece via configState.
+    const saveError = await saveConfig(config);
+    if (saveError) return;
+
     const mergedConfig = applyModelOverrides(config, cliArgs);
     const targetScreen = cliAppliedRef.current ? 'context' : resolveInitialScreen(cliArgs);
     setPipeline((prev) => ({
@@ -142,8 +145,10 @@ export const App = ({ cliArgs }: AppProps) => {
     setScreen(targetScreen);
   }, [saveConfig, cliArgs]);
 
-  const handleModelChange = useCallback((config: Config) => {
-    void saveConfig(config);
+  const handleModelChange = useCallback(async (config: Config) => {
+    const saveError = await saveConfig(config);
+    if (saveError) return;
+
     setPipeline((prev) => ({
       ...prev,
       config,
@@ -263,11 +268,14 @@ export const App = ({ cliArgs }: AppProps) => {
     // Evita que overrides de sessao vazem para o disco se o usuario confirmar sem alterar.
     const persistedConfig = configState.status === 'loaded' ? configState.config : pipeline.config;
     return (
-      <ConfigScreen
-        skipApiKey
-        existingConfig={persistedConfig}
-        onComplete={handleModelChange}
-      />
+      <Box flexDirection="column">
+        {configState.status === 'error' && <Box padding={1}><Text color="red">{getConfigErrorMessage(configState.error)}</Text></Box>}
+        <ConfigScreen
+          skipApiKey
+          existingConfig={persistedConfig}
+          onComplete={handleModelChange}
+        />
+      </Box>
     );
   }
 

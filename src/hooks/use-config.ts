@@ -105,14 +105,17 @@ export const useConfig = () => {
     void load();
   }, []);
 
-  const saveConfig = useCallback(async (config: Config): Promise<void> => {
+  const saveConfig = useCallback(async (config: Config): Promise<ConfigErrorKind | null> => {
     try {
       // Re-validar garante sincronização entre selectedAgents e campos legados
       const validated = ConfigSchema.parse(config);
       await writeFile(CONFIG_PATH, JSON.stringify(validated, null, 2), 'utf-8');
       setState({ status: 'loaded', config: validated });
+      return null;
     } catch (err) {
-      setState({ status: 'error', error: classifyWriteError(err) });
+      const classified = classifyWriteError(err);
+      setState({ status: 'error', error: classified });
+      return classified;
     }
   }, []);
 

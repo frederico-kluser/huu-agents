@@ -125,8 +125,9 @@ export const App = ({ cliArgs }: AppProps) => {
   });
 
   const handleConfigComplete = useCallback((config: Config) => {
+    // Persistir config original (sem overrides CLI — esses sao de sessao)
+    void saveConfig(config);
     const mergedConfig = applyModelOverrides(config, cliArgs);
-    void saveConfig(mergedConfig);
     const targetScreen = cliAppliedRef.current ? 'context' : resolveInitialScreen(cliArgs);
     setPipeline((prev) => ({
       ...prev,
@@ -254,10 +255,13 @@ export const App = ({ cliArgs }: AppProps) => {
   }
 
   if (screen === 'model-change' && pipeline.config) {
+    // Usar config persistida (sem overrides CLI) para pre-preencher a tela de modelos.
+    // Evita que overrides de sessao vazem para o disco se o usuario confirmar sem alterar.
+    const persistedConfig = configState.status === 'loaded' ? configState.config : pipeline.config;
     return (
       <ConfigScreen
         skipApiKey
-        existingConfig={pipeline.config}
+        existingConfig={persistedConfig}
         onComplete={handleModelChange}
       />
     );

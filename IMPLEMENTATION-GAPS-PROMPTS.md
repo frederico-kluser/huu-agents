@@ -80,7 +80,7 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Task 2: separar overrides de CLI da config persistida
+## Task 2: separar overrides de CLI da config persistida — DONE
 
 Diagnostico:
 - A README afirma que `--planner` e `--worker` valem apenas para a sessao atual.

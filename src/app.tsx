@@ -150,9 +150,14 @@ export const App = ({ cliArgs }: AppProps) => {
   }, [saveConfig, pipeline.previousScreen]);
 
   const handleContextComplete = useCallback((selectedPaths: string[]) => {
-    setPipeline((prev) => ({ ...prev, contextFiles: selectedPaths }));
-    setScreen('task');
-  }, []);
+    const hasCliTask = Boolean(cliArgs?.task);
+    setPipeline((prev) => ({
+      ...prev,
+      contextFiles: selectedPaths,
+      ...(hasCliTask ? { startTime: Date.now() } : {}),
+    }));
+    setScreen(hasCliTask ? 'executing' : 'task');
+  }, [cliArgs?.task]);
 
   const handleTaskSubmit = useCallback((task: string) => {
     setPipeline((prev) => ({ ...prev, macroTask: task, startTime: Date.now() }));
@@ -266,7 +271,7 @@ export const App = ({ cliArgs }: AppProps) => {
     return (
       <Box flexDirection="column">
         {statusBarEl}
-        <TaskScreen config={pipeline.config} contextFiles={[...pipeline.contextFiles]} onSubmit={handleTaskSubmit} />
+        <TaskScreen config={pipeline.config} contextFiles={[...pipeline.contextFiles]} onSubmit={handleTaskSubmit} initialTask={pipeline.macroTask} />
       </Box>
     );
   }

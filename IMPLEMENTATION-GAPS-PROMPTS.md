@@ -6,7 +6,7 @@ Escopo:
 - Inclui somente gaps confirmados por revisao de codigo e validacao local.
 - Cada task abaixo tem um prompt XML proprio, pronto para execucao.
 
-## Task 1: corrigir o fluxo de `--task`
+## Task 1: corrigir o fluxo de `--task` — DONE
 
 Diagnostico:
 - O contrato atual de CLI diz que `--task` pula a tela de input da macro-task.

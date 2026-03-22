@@ -7,6 +7,7 @@ interface TaskScreenProps {
   readonly config: Config;
   readonly contextFiles: readonly string[];
   readonly onSubmit: (task: string) => void;
+  readonly initialTask?: string;
 }
 
 /**
@@ -26,8 +27,8 @@ interface TaskScreenProps {
  * />
  * ```
  */
-export const TaskScreen = ({ config, contextFiles, onSubmit }: TaskScreenProps) => {
-  const [task, setTask] = useState('');
+export const TaskScreen = ({ config, contextFiles, onSubmit, initialTask = '' }: TaskScreenProps) => {
+  const [task, setTask] = useState(initialTask);
   const [error, setError] = useState('');
 
   const handleSubmit = (value: string) => {

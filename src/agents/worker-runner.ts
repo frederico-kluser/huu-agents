@@ -11,7 +11,7 @@ import {
   createAgentSession,
   SessionManager,
 } from '@mariozechner/pi-coding-agent';
-import { getModel } from '@mariozechner/pi-ai';
+import { getModel, streamSimple } from '@mariozechner/pi-ai';
 
 import type { DAGNode } from '../schemas/dag.schema.js';
 import { WorkerResultSchema, type WorkerResult } from '../schemas/worker-result.schema.js';
@@ -173,7 +173,11 @@ function parseModelId(model: string): { provider: string; modelId: string } {
 /**
  * Cria session Pi SDK com modelo selecionado pelo usuário.
  * Parseia config.model ("provider/modelId"), resolve via getModel(),
- * e configura auth com o provider correto.
+ * configura auth com o provider correto, e injeta temperature via streamFn.
+ *
+ * Temperature é um parâmetro call-time do Pi SDK (StreamOptions.temperature),
+ * não uma propriedade do Model. O Agent não expõe temperature diretamente,
+ * então usamos streamFn para interceptar e injetar o valor em cada chamada.
  *
  * @throws {WorkerRunnerError} Modelo inválido ou provider não suportado
  */
@@ -188,12 +192,22 @@ async function createPiSession(
   const authStorage = AuthStorage.create();
   authStorage.setRuntimeApiKey(provider, config.apiKey);
 
-  return createAgentSession({
+  const result = await createAgentSession({
     model: piModel,
     sessionManager: SessionManager.inMemory(),
     authStorage,
     cwd: worktreePath,
   });
+
+  // Injeta temperature via streamFn — Pi SDK aceita temperature em StreamOptions
+  // mas o Agent não a expõe como propriedade; streamFn é o ponto de interceptação oficial
+  if (config.temperature !== undefined) {
+    const temp = config.temperature;
+    result.session.agent.streamFn = (model, context, options) =>
+      streamSimple(model, context, { ...options, temperature: temp });
+  }
+
+  return result;
 }
 
 /**

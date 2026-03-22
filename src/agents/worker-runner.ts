@@ -186,7 +186,7 @@ async function createPiSession(
   config: WorkerRunnerConfig,
 ): Promise<{ session: PiSession }> {
   const { provider, modelId } = parseModelId(config.model);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- provider vem do config do usuário, validado em runtime pelo Pi SDK
+   
   const piModel = getModel(provider as never, modelId);
 
   const authStorage = AuthStorage.create();

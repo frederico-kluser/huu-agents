@@ -96,6 +96,46 @@ export const topoSortWaves = (
   return waves;
 };
 
+// --- Concurrency Limiter ---
+
+/**
+ * Executa tasks com limite de concorrência via semáforo cooperativo.
+ * Mantém até `limit` Promises ativas simultaneamente dentro de uma wave.
+ *
+ * @param tasks - Factories de Promise a executar
+ * @param limit - Máximo de execuções simultâneas (>=1)
+ * @returns Resultados na mesma ordem dos tasks (settled)
+ */
+const runWithConcurrency = async <T>(
+  tasks: readonly (() => Promise<T>)[],
+  limit: number,
+): Promise<PromiseSettledResult<T>[]> => {
+  if (tasks.length === 0) return [];
+
+  const results: PromiseSettledResult<T>[] = new Array(tasks.length);
+  let nextIndex = 0;
+
+  const worker = async (): Promise<void> => {
+    while (nextIndex < tasks.length) {
+      const idx = nextIndex++;
+      try {
+        const value = await tasks[idx]!();
+        results[idx] = { status: 'fulfilled', value };
+      } catch (reason) {
+        results[idx] = { status: 'rejected', reason };
+      }
+    }
+  };
+
+  const workers = Array.from(
+    { length: Math.min(limit, tasks.length) },
+    () => worker(),
+  );
+
+  await Promise.all(workers);
+  return results;
+};
+
 // --- DAG Executor ---
 
 /**
@@ -114,7 +154,7 @@ export const topoSortWaves = (
  * const emitter = new EventEmitter();
  * emitter.on('node-completed', ({ nodeId }) => console.log(`Done: ${nodeId}`));
  *
- * const result = await executeDAG(dag, '20260321-143000', myWorkerFn, emitter);
+ * const result = await executeDAG(dag, '20260321-143000', myWorkerFn, emitter, undefined, 4);
  * console.log(result.completed); // ['1', '3']
  * console.log(result.blocked);   // ['4'] — dependia de node que falhou
  */
@@ -124,6 +164,7 @@ export const executeDAG = async (
   workerFn: WorkerFn,
   emitter?: EventEmitter,
   completedNodeIds?: ReadonlySet<string>,
+  maxConcurrency: number = 4,
 ): Promise<ExecutionResult> => {
   const nodeMap = new Map(dag.nodes.map((n): [string, DAGNode] => [n.id, n]));
   const completed = new Set<string>(completedNodeIds);
@@ -197,8 +238,9 @@ export const executeDAG = async (
     const executable = wave.filter(id => !blocked.has(id) && !completed.has(id));
     if (executable.length === 0) continue;
 
-    const settled = await Promise.allSettled(
-      executable.map(nodeId => executeNode(nodeId)),
+    const settled = await runWithConcurrency(
+      executable.map(nodeId => () => executeNode(nodeId)),
+      maxConcurrency,
     );
 
     for (let i = 0; i < executable.length; i++) {

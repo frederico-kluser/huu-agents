@@ -5,6 +5,7 @@ import { ContextScreen } from './screens/context-screen.js';
 import { TaskScreen } from './screens/task-screen.js';
 import { ExecutionScreen } from './screens/execution-screen.js';
 import { ResultScreen } from './screens/result-screen.js';
+import { DiffScreen } from './screens/diff-screen.js';
 import { StatusBar } from './components/status-bar.js';
 import { useConfig } from './hooks/use-config.js';
 import { runPipeline, type PipelineProgress } from './pipeline/orchestrator.js';
@@ -12,7 +13,7 @@ import type { Config } from './schemas/config.schema.js';
 import type { DAGNode } from './schemas/dag.schema.js';
 import type { WorkerResult } from './schemas/worker-result.schema.js';
 
-type Screen = 'loading' | 'config' | 'context' | 'task' | 'executing' | 'result' | 'model-change';
+type Screen = 'loading' | 'config' | 'context' | 'task' | 'executing' | 'result' | 'diff' | 'model-change';
 
 interface PipelineResult {
   readonly nodes: readonly DAGNode[];
@@ -64,7 +65,7 @@ export const App = () => {
 
   // Keybinding [m] para trocar modelos (exceto durante config/loading/executing)
   useInput((input) => {
-    if (input === 'm' && pipeline.config && screen !== 'config' && screen !== 'loading' && screen !== 'executing' && screen !== 'model-change') {
+    if (input === 'm' && pipeline.config && screen !== 'config' && screen !== 'loading' && screen !== 'executing' && screen !== 'model-change' && screen !== 'diff') {
       setPipeline((prev) => ({ ...prev, previousScreen: screen }));
       setScreen('model-change');
     }
@@ -182,8 +183,17 @@ export const App = () => {
         <ResultScreen
           nodes={pipeline.result.nodes} results={pipeline.result.results}
           branch={pipeline.result.branch} diffStat={pipeline.result.diffStat}
-          onRetry={handleRetry} onQuit={() => {}} onViewDiff={() => {}}
+          onRetry={handleRetry} onQuit={() => {}} onViewDiff={() => setScreen('diff')}
         />
+      </Box>
+    );
+  }
+
+  if (screen === 'diff' && pipeline.result) {
+    return (
+      <Box flexDirection="column">
+        {statusBarEl}
+        <DiffScreen branch={pipeline.result.branch} onBack={() => setScreen('result')} />
       </Box>
     );
   }

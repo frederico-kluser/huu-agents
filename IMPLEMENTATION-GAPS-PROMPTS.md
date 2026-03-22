@@ -222,7 +222,7 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Task 4: separar `blocked` de `failed` no resultado final
+## Task 4: separar `blocked` de `failed` no resultado final — DONE
 
 Diagnostico:
 - O retry seletivo existe, mas o pipeline ainda trata dependentes bloqueados como se fossem falhas diretas.

@@ -5,8 +5,9 @@ import { z } from 'zod';
  * - success: Task completed successfully
  * - failure: Task failed with error
  * - partial: Task partially completed with some success and some failure
+ * - blocked: Task skipped because a dependency failed
  */
-const WorkerStatus = z.enum(['success', 'failure', 'partial']);
+const WorkerStatus = z.enum(['success', 'failure', 'partial', 'blocked']);
 export type WorkerStatus = z.infer<typeof WorkerStatus>;
 
 /**

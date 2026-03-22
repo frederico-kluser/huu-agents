@@ -6,8 +6,9 @@ import { z } from 'zod';
  * - running: Node currently executing
  * - done: Node execution completed successfully
  * - failed: Node execution failed
+ * - blocked: Node skipped because a dependency failed
  */
-const NodeStatus = z.enum(['pending', 'running', 'done', 'failed']);
+const NodeStatus = z.enum(['pending', 'running', 'done', 'failed', 'blocked']);
 export type NodeStatus = z.infer<typeof NodeStatus>;
 
 /**

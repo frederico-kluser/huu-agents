@@ -170,6 +170,13 @@ function createExecutionEmitter(
     onStatusChange(null);
   });
 
+  emitter.on('node-blocked', ({ nodeId, blockedBy }: { nodeId: string; blockedBy: string }) => {
+    updateNodeStatus(dag, nodeId, 'blocked');
+    results.push({ nodeId, status: 'blocked', filesModified: [], commitHash: null, error: `Bloqueado: dependencia '${blockedBy}' falhou` });
+    addLog(logs, nodeId, `BLOQUEADO: dependencia '${blockedBy}' falhou`);
+    onStatusChange(null);
+  });
+
   emitter.on('merge-resolved', ({ nodeId, strategy, conflictFiles }: { nodeId: string; strategy: MergeStrategy; conflictFiles?: readonly string[] }) => {
     const detail = strategy === 'theirs' && conflictFiles?.length
       ? ` — ${conflictFiles.length} arquivo(s) resolvido(s) via last-writer-wins`

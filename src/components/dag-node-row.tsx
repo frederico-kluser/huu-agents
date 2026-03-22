@@ -6,6 +6,7 @@ const STATUS_ICON: Record<NodeStatus, string> = {
   running: '\u27F3',
   done: '\u2713',
   failed: '\u2717',
+  blocked: '\u29B8',
 };
 
 const STATUS_COLOR: Record<NodeStatus, string> = {
@@ -13,6 +14,7 @@ const STATUS_COLOR: Record<NodeStatus, string> = {
   running: 'yellow',
   done: 'green',
   failed: 'red',
+  blocked: 'yellow',
 };
 
 interface DagNodeRowProps {

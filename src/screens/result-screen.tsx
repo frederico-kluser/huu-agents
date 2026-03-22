@@ -56,17 +56,19 @@ export const ResultScreen = ({
 
   const completed = nodes.filter((n) => n.status === 'done').length;
   const failed = nodes.filter((n) => n.status === 'failed').length;
-  const blocked = nodes.filter((n) => n.status === 'pending').length;
+  const blocked = nodes.filter((n) => n.status === 'blocked').length;
   const allPassed = failed === 0 && blocked === 0;
   const failedNodeIds = nodes.filter((n) => n.status === 'failed').map((n) => n.id);
+  const blockedNodeIds = nodes.filter((n) => n.status === 'blocked').map((n) => n.id);
+  const retryableCount = failedNodeIds.length + blockedNodeIds.length;
 
   useInput((input) => {
     if (input === 'q') {
       onQuit();
       exit();
     }
-    if (input === 'r' && failedNodeIds.length > 0) {
-      onRetry(failedNodeIds);
+    if (input === 'r' && retryableCount > 0) {
+      onRetry([...failedNodeIds, ...blockedNodeIds]);
     }
     if (input === 'd') {
       onViewDiff();
@@ -120,8 +122,26 @@ export const ResultScreen = ({
         </Box>
       )}
 
+      {blockedNodeIds.length > 0 && (
+        <Box flexDirection="column" marginTop={1} borderStyle="single" borderColor="yellow" paddingX={1}>
+          <Text bold color="yellow">Nodes bloqueados</Text>
+          {blockedNodeIds.map((nodeId) => {
+            const node = nodes.find((n) => n.id === nodeId);
+            const result = results.find((r) => r.nodeId === nodeId);
+            return (
+              <Box key={nodeId} marginTop={0}>
+                <Text color="yellow">{'~ '}</Text>
+                <Text bold>{nodeId}</Text>
+                <Text dimColor>{' — '}{node?.task ?? 'unknown'}</Text>
+                {result?.error && <Text color="yellow">{'\n  '}{result.error}</Text>}
+              </Box>
+            );
+          })}
+        </Box>
+      )}
+
       <Box marginTop={1} gap={2}>
-        {failedNodeIds.length > 0 && <Text dimColor>[r] retry falhados</Text>}
+        {retryableCount > 0 && <Text dimColor>[r] retry falhados/bloqueados</Text>}
         <Text dimColor>[d] ver diff</Text>
         <Text dimColor>[q] sair</Text>
       </Box>

@@ -22,12 +22,13 @@ export type WorkerFn = (
 
 /**
  * Eventos emitidos durante execução do DAG.
- * Usar com emitter.on('node-started' | 'node-completed' | 'node-failed', handler).
+ * Usar com emitter.on('node-started' | 'node-completed' | 'node-failed' | 'node-blocked', handler).
  */
 export interface DAGExecutorEvents {
   'node-started': [{ readonly nodeId: string }];
   'node-completed': [{ readonly nodeId: string; readonly result: WorkerResult }];
   'node-failed': [{ readonly nodeId: string; readonly error: string }];
+  'node-blocked': [{ readonly nodeId: string; readonly blockedBy: string }];
   'merge-resolved': [{ readonly nodeId: string; readonly strategy: MergeStrategy; readonly conflictFiles?: readonly string[] }];
 }
 
@@ -182,9 +183,9 @@ export const executeDAG = async (
         !failed.has(node.id)
       ) {
         blocked.add(node.id);
-        emitter?.emit('node-failed', {
+        emitter?.emit('node-blocked', {
           nodeId: node.id,
-          error: `Bloqueado: dependência '${failedId}' falhou`,
+          blockedBy: failedId,
         });
         blockDependents(node.id);
       }

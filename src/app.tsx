@@ -130,8 +130,8 @@ export const App = () => {
   const showStatusBar = pipeline.config && screen !== 'loading' && screen !== 'config';
   const statusBarEl = showStatusBar ? (
     <StatusBar
-      plannerModel={pipeline.config!.plannerModel}
-      workerModel={pipeline.config!.workerModel}
+      plannerModel={pipeline.config!.selectedAgents.planner}
+      workerModel={pipeline.config!.selectedAgents.worker}
       onChangeModels={screen !== 'executing' ? () => {
         setPipeline((prev) => ({ ...prev, previousScreen: screen }));
         setScreen('model-change');
@@ -156,7 +156,7 @@ export const App = () => {
     return (
       <ConfigScreen
         skipApiKey
-        existingApiKey={pipeline.config.openrouterApiKey}
+        existingConfig={pipeline.config}
         onComplete={handleModelChange}
       />
     );

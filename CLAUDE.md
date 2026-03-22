@@ -25,7 +25,7 @@ Node.js >=20, TypeScript strict (ES2022/NodeNext), Ink v6 + React 19, Zod, LangC
 src/
 ├── cli.tsx, app.tsx              # Entry point + router (state machine + StatusBar)
 ├── data/models.ts                # Catálogo 18 modelos (preço, speed, SWE-Bench)
-├── schemas/                      # Zod: dag, config, worker-result
+├── schemas/                      # Zod: dag, config (selectedAgents + legado), worker-result
 ├── screens/                      # 6 telas: config, context, task, dag-view, execution, result
 ├── components/                   # model-table, status-bar, dag-node-row, tree-node, worker-log
 ├── prompts/                      # Planner, Explorer, Worker (adaptados por provider)
@@ -58,6 +58,7 @@ Referência: `docs/general/file-agent-patterns.md`.
 - Imutabilidade: novos objetos, nunca mutações
 - Commits atômicos, conventional format (`feat:`, `fix:`, etc.)
 - Modelo selecionado pelo usuário deve chegar ao Pi SDK via `getModel()`
+- Usar `selectedAgents` como fonte de verdade para modelos; `plannerModel`/`workerModel` são campos legados mantidos em sync pelo schema transform
 
 **PERGUNTAR ANTES:**
 - LOC acima de 500/arquivo

@@ -13,8 +13,8 @@ interface ConfigScreenProps {
   readonly onComplete: (config: Config) => void;
   /** Pular etapa de API key (para reconfiguração de modelos via [m]) */
   readonly skipApiKey?: boolean;
-  /** API key existente (usada quando skipApiKey=true) */
-  readonly existingApiKey?: string;
+  /** Config existente (preserva worktreeBasePath e pré-seleciona modelos ao reabrir via [m]) */
+  readonly existingConfig?: Config;
 }
 
 /** Feedback visual do status de validação da API key */
@@ -47,19 +47,19 @@ const ModelSummary = ({ label, modelId }: { readonly label: string; readonly mod
  *
  * @param props.onComplete - Callback com Config validada
  * @param props.skipApiKey - Pular API key (reconfiguração via [m])
- * @param props.existingApiKey - API key existente
+ * @param props.existingConfig - Config existente (preserva worktreeBasePath e modelos atuais)
  *
  * @example
  * ```tsx
  * <ConfigScreen onComplete={(config) => saveConfig(config)} />
- * <ConfigScreen skipApiKey existingApiKey="sk-or-..." onComplete={handleModelChange} />
+ * <ConfigScreen skipApiKey existingConfig={currentConfig} onComplete={handleModelChange} />
  * ```
  */
-export const ConfigScreen = ({ onComplete, skipApiKey, existingApiKey }: ConfigScreenProps) => {
+export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigScreenProps) => {
   const initialStep: ConfigStep = skipApiKey ? 'planner-model' : 'api-key';
   const [step, setStep] = useState<ConfigStep>(initialStep);
-  const [apiKey, setApiKey] = useState(existingApiKey ?? '');
-  const [plannerModelId, setPlannerModelId] = useState('');
+  const [apiKey, setApiKey] = useState(existingConfig?.openrouterApiKey ?? '');
+  const [plannerModelId, setPlannerModelId] = useState(existingConfig?.selectedAgents?.planner ?? '');
   const { validation, validate } = useApiValidation();
 
   const handleApiKeySubmit = useCallback((value: string) => {
@@ -74,14 +74,17 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingApiKey }: ConfigS
     setStep('worker-model');
   }, []);
 
+  const worktreeBasePath = existingConfig?.worktreeBasePath ?? '.pi-dag-worktrees';
+
   const handleWorkerSelect = useCallback((model: ModelEntry) => {
     onComplete({
       openrouterApiKey: apiKey,
       plannerModel: plannerModelId,
       workerModel: model.id,
-      worktreeBasePath: '.pi-dag-worktrees',
+      selectedAgents: { planner: plannerModelId, worker: model.id },
+      worktreeBasePath,
     });
-  }, [apiKey, plannerModelId, onComplete]);
+  }, [apiKey, plannerModelId, worktreeBasePath, onComplete]);
 
   // Step: API Key
   if (step === 'api-key') {

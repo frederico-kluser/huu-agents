@@ -83,7 +83,7 @@ src/
 │   └── models.ts                    # Catálogo de 18 modelos (preço, bench, speed)
 ├── schemas/
 │   ├── dag.schema.ts                # DAG output do Planner (Zod)
-│   ├── config.schema.ts             # ~/.pi-dag-cli.json (Zod)
+│   ├── config.schema.ts             # ~/.pi-dag-cli.json (Zod, selectedAgents + legado)
 │   └── worker-result.schema.ts      # Resultado de cada Worker (Zod)
 ├── screens/
 │   ├── config-screen.tsx            # Config API key + seleção via ModelTable

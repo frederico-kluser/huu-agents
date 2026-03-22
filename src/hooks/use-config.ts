@@ -16,12 +16,14 @@ type ConfigState =
 /**
  * Hook para carregar e persistir configuracao do Pi DAG CLI em ~/.pi-dag-cli.json.
  * Valida o conteudo com Zod (ConfigSchema) antes de aceitar como valido.
+ * Suporta migração automática de formato legado (plannerModel/workerModel)
+ * para formato novo (selectedAgents), mantendo ambos sincronizados.
  *
  * @returns Estado da config e funcao para salvar
  * @throws {z.ZodError} Se config nao passar na validacao Zod ao salvar
  * @example
  * const { state, saveConfig } = useConfig();
- * if (state.status === 'loaded') console.log(state.config.plannerModel);
+ * if (state.status === 'loaded') console.log(state.config.selectedAgents.planner);
  */
 export const useConfig = () => {
   const [state, setState] = useState<ConfigState>({ status: 'loading' });
@@ -31,6 +33,7 @@ export const useConfig = () => {
       try {
         const raw = await readFile(CONFIG_PATH, 'utf-8');
         const parsed: unknown = JSON.parse(raw);
+        // Transform do schema cuida da migração legado → selectedAgents
         const config = ConfigSchema.parse(parsed);
         setState({ status: 'loaded', config });
       } catch {
@@ -42,6 +45,7 @@ export const useConfig = () => {
 
   const saveConfig = useCallback(async (config: Config): Promise<void> => {
     try {
+      // Re-validar garante sincronização entre selectedAgents e campos legados
       const validated = ConfigSchema.parse(config);
       await writeFile(CONFIG_PATH, JSON.stringify(validated, null, 2), 'utf-8');
       setState({ status: 'loaded', config: validated });

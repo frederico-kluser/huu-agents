@@ -15,9 +15,23 @@ Resultado esperado ao final da implementação futura:
 
 ## Status atual
 
-- O código não foi alterado para implementar essa feature.
-- O estado atual do projeto continua sendo o definido pelos arquivos em `src/` e pelo backlog já existente.
-- Este documento registra o que deverá ser implementado depois.
+**Implementado em 2026-03-22.**
+
+Todas as 5 fases foram concluídas e validadas:
+
+- Fase 1: `SelectedAgentsSchema` criado em `config.schema.ts` com Zod transform
+- Fase 2: `use-config.ts` migra automaticamente configs legadas via `ConfigSchema.parse()`
+- Fase 3: `config-screen.tsx` aceita `existingConfig` — preserva `worktreeBasePath` e pré-seleciona modelos
+- Fase 4: `app.tsx` usa `selectedAgents` na StatusBar e passa config completa ao ConfigScreen
+- Fase 5: Typecheck passa, code review realizado
+
+Critérios de aceite atendidos:
+- [x] Schema explícito para agentes selecionados
+- [x] Configs antigas continuam carregando (migração automática)
+- [x] Configs novas salvas no formato alvo
+- [x] UI preserva escolha atual ao reabrir via `[m]`
+- [x] `plannerModel`, `workerModel` e `selectedAgents` sempre coerentes
+- [x] Typecheck passa
 
 ## Fonte de verdade
 

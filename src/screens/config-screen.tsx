@@ -1,31 +1,23 @@
 import { useState, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import TextInput from 'ink-text-input';
-import SelectInput from 'ink-select-input';
 import { useApiValidation, type ValidationState } from '../hooks/use-api-validation.js';
+import { ModelTable } from '../components/model-table.js';
+import { getPlannerModels, getWorkerModels, findModel, formatPrice } from '../data/models.js';
+import type { ModelEntry } from '../data/models.js';
 import type { Config } from '../schemas/config.schema.js';
 
 type ConfigStep = 'api-key' | 'planner-model' | 'worker-model';
 
 interface ConfigScreenProps {
   readonly onComplete: (config: Config) => void;
+  /** Pular etapa de API key (para reconfiguração de modelos via [m]) */
+  readonly skipApiKey?: boolean;
+  /** API key existente (usada quando skipApiKey=true) */
+  readonly existingApiKey?: string;
 }
 
-/** Modelos com reasoning para planejamento de DAG */
-const PLANNER_MODELS = [
-  { label: 'GPT-4.1 (OpenAI)', value: 'openai/gpt-4.1' },
-  { label: 'Gemini 2.5 Pro (Google)', value: 'google/gemini-2.5-pro' },
-  { label: 'DeepSeek Chat', value: 'deepseek/deepseek-chat' },
-];
-
-/** Modelos rapidos para execucao de workers */
-const WORKER_MODELS = [
-  { label: 'GPT-4.1 Mini (OpenAI)', value: 'openai/gpt-4.1-mini' },
-  { label: 'Gemini 2.5 Flash (Google)', value: 'google/gemini-2.5-flash' },
-  { label: 'GPT-4.1 Nano (OpenAI)', value: 'openai/gpt-4.1-nano' },
-];
-
-/** Feedback visual do status de validacao da API key */
+/** Feedback visual do status de validação da API key */
 const ValidationFeedback = ({ validation }: { readonly validation: ValidationState }) => {
   if (validation.status === 'validating') return <Text color="yellow">Validando...</Text>;
   if (validation.status === 'valid') return <Text color="green">API key valida</Text>;
@@ -33,19 +25,41 @@ const ValidationFeedback = ({ validation }: { readonly validation: ValidationSta
   return null;
 };
 
+/** Resumo compacto do modelo selecionado */
+const ModelSummary = ({ label, modelId }: { readonly label: string; readonly modelId: string }) => {
+  const model = findModel(modelId);
+  const name = model?.name ?? modelId;
+  const price = model ? `${formatPrice(model.inputPrice)}/${formatPrice(model.outputPrice)}` : '';
+  const swe = model?.sweBench !== null && model?.sweBench !== undefined ? ` | SWE: ${model.sweBench}%` : '';
+  return (
+    <Box marginTop={1}>
+      <Text bold>{label}: </Text>
+      <Text color="green">{name} ({price}{swe}) </Text>
+      <Text color="green">✓</Text>
+    </Box>
+  );
+};
+
 /**
- * Tela de configuracao inicial do Pi DAG CLI.
- * Coleta API key OpenRouter, valida via HEAD request, e permite selecao
- * de modelos para Planner (reasoning) e Worker (fast).
+ * Tela de configuração do Pi DAG CLI.
+ * Coleta API key, e permite seleção de modelos Planner e Worker
+ * via tabela filtrável com 18 modelos (preço, velocidade, benchmarks).
  *
- * @param props.onComplete - Callback com Config validada ao finalizar setup
+ * @param props.onComplete - Callback com Config validada
+ * @param props.skipApiKey - Pular API key (reconfiguração via [m])
+ * @param props.existingApiKey - API key existente
+ *
  * @example
+ * ```tsx
  * <ConfigScreen onComplete={(config) => saveConfig(config)} />
+ * <ConfigScreen skipApiKey existingApiKey="sk-or-..." onComplete={handleModelChange} />
+ * ```
  */
-export const ConfigScreen = ({ onComplete }: ConfigScreenProps) => {
-  const [step, setStep] = useState<ConfigStep>('api-key');
-  const [apiKey, setApiKey] = useState('');
-  const [plannerModel, setPlannerModel] = useState('');
+export const ConfigScreen = ({ onComplete, skipApiKey, existingApiKey }: ConfigScreenProps) => {
+  const initialStep: ConfigStep = skipApiKey ? 'planner-model' : 'api-key';
+  const [step, setStep] = useState<ConfigStep>(initialStep);
+  const [apiKey, setApiKey] = useState(existingApiKey ?? '');
+  const [plannerModelId, setPlannerModelId] = useState('');
   const { validation, validate } = useApiValidation();
 
   const handleApiKeySubmit = useCallback((value: string) => {
@@ -55,41 +69,28 @@ export const ConfigScreen = ({ onComplete }: ConfigScreenProps) => {
     });
   }, [validate]);
 
-  const handlePlannerSelect = useCallback((item: { label: string; value: string }) => {
-    setPlannerModel(item.value);
+  const handlePlannerSelect = useCallback((model: ModelEntry) => {
+    setPlannerModelId(model.id);
     setStep('worker-model');
   }, []);
 
-  const handleWorkerSelect = useCallback((item: { label: string; value: string }) => {
+  const handleWorkerSelect = useCallback((model: ModelEntry) => {
     onComplete({
       openrouterApiKey: apiKey,
-      plannerModel,
-      workerModel: item.value,
+      plannerModel: plannerModelId,
+      workerModel: model.id,
       worktreeBasePath: '.pi-dag-worktrees',
     });
-  }, [apiKey, plannerModel, onComplete]);
+  }, [apiKey, plannerModelId, onComplete]);
 
-  const helpText = step === 'api-key'
-    ? 'Cole sua API key e pressione Enter'
-    : step === 'planner-model'
-      ? 'Selecione o modelo para planejamento (setas + Enter)'
-      : 'Selecione o modelo para execucao (setas + Enter)';
-
-  return (
-    <Box flexDirection="column" padding={1}>
-      <Box
-        borderStyle="round"
-        borderColor="cyan"
-        paddingX={2}
-        paddingY={1}
-        flexDirection="column"
-      >
-        <Text bold color="cyan">Pi DAG CLI — Configuracao</Text>
-
-        {/* API Key input */}
-        <Box marginTop={1}>
-          <Text>OpenRouter API Key: </Text>
-          {step === 'api-key' ? (
+  // Step: API Key
+  if (step === 'api-key') {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
+          <Text bold color="cyan">Pi DAG CLI — Configuracao</Text>
+          <Box marginTop={1}>
+            <Text>OpenRouter API Key: </Text>
             <TextInput
               value={apiKey}
               onChange={setApiKey}
@@ -97,39 +98,36 @@ export const ConfigScreen = ({ onComplete }: ConfigScreenProps) => {
               mask="*"
               placeholder="sk-or-..."
             />
-          ) : (
-            <Text color="green">{'*'.repeat(Math.min(apiKey.length, 20))} ✓</Text>
-          )}
+          </Box>
+          <ValidationFeedback validation={validation} />
         </Box>
-
-        {/* Validation status (visivel apenas no step api-key) */}
-        {step === 'api-key' && <ValidationFeedback validation={validation} />}
-
-        {/* Planner model (visivel apos validacao) */}
-        {(step === 'planner-model' || step === 'worker-model') && (
-          <Box marginTop={1} flexDirection="column">
-            <Text bold>Modelo Planner (reasoning):</Text>
-            {step === 'planner-model' ? (
-              <SelectInput items={PLANNER_MODELS} onSelect={handlePlannerSelect} />
-            ) : (
-              <Text color="green">  {plannerModel} ✓</Text>
-            )}
-          </Box>
-        )}
-
-        {/* Worker model (visivel apos planner) */}
-        {step === 'worker-model' && (
-          <Box marginTop={1} flexDirection="column">
-            <Text bold>Modelo Worker (fast):</Text>
-            <SelectInput items={WORKER_MODELS} onSelect={handleWorkerSelect} />
-          </Box>
-        )}
+        <Box marginTop={1}>
+          <Text dimColor>Cole sua API key e pressione Enter</Text>
+        </Box>
       </Box>
+    );
+  }
 
-      {/* Help text */}
-      <Box marginTop={1}>
-        <Text dimColor>{helpText}</Text>
-      </Box>
+  // Step: Planner Model
+  if (step === 'planner-model') {
+    return (
+      <ModelTable
+        models={getPlannerModels()}
+        onSelect={handlePlannerSelect}
+        title="Modelo Planner (raciocinio)"
+      />
+    );
+  }
+
+  // Step: Worker Model
+  return (
+    <Box flexDirection="column">
+      <ModelSummary label="Planner" modelId={plannerModelId} />
+      <ModelTable
+        models={getWorkerModels()}
+        onSelect={handleWorkerSelect}
+        title="Modelo Worker (execucao rapida)"
+      />
     </Box>
   );
 };

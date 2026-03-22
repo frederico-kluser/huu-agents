@@ -153,7 +153,7 @@ Prompt XML:
 </task_prompt>
 ```
 
-## Task 3: remover `main` hardcoded do diff final
+## Task 3: remover `main` hardcoded do diff final — DONE
 
 Diagnostico:
 - O diff final real existe, mas ainda usa `main...branch` diretamente.

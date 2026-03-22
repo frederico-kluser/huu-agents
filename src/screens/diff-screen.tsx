@@ -4,6 +4,7 @@ import { execGit } from '../git/git-wrapper.js';
 
 interface DiffScreenProps {
   readonly branch: string;
+  readonly baseBranch: string;
   readonly onBack: () => void;
 }
 
@@ -21,15 +22,16 @@ const lineColor = (line: string): string | undefined => {
  * Tela de visualizacao do diff completo da branch final.
  * Viewer scrollavel com keybindings vim-like.
  *
- * @param props.branch - Nome da branch para calcular diff vs main
+ * @param props.branch - Nome da branch de task
+ * @param props.baseBranch - Branch base para calcular diff
  * @param props.onBack - Callback para voltar a tela de resultado
  *
  * @example
  * ```tsx
- * <DiffScreen branch="task-20260321-143000" onBack={() => setScreen('result')} />
+ * <DiffScreen branch="task-20260321-143000" baseBranch="main" onBack={() => setScreen('result')} />
  * ```
  */
-export const DiffScreen = ({ branch, onBack }: DiffScreenProps) => {
+export const DiffScreen = ({ branch, baseBranch, onBack }: DiffScreenProps) => {
   const { stdout } = useStdout();
   const [diff, setDiff] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export const DiffScreen = ({ branch, onBack }: DiffScreenProps) => {
   useEffect(() => {
     const fetch = async () => {
       const result = await execGit(
-        ['diff', `main...${branch}`],
+        ['diff', `${baseBranch}...${branch}`],
         process.cwd(),
       );
       if (result.ok) {
@@ -50,7 +52,7 @@ export const DiffScreen = ({ branch, onBack }: DiffScreenProps) => {
       }
     };
     void fetch();
-  }, [branch]);
+  }, [baseBranch, branch]);
 
   const lines = diff?.split('\n') ?? [];
   const maxOffset = Math.max(0, lines.length - viewportHeight);
@@ -97,7 +99,7 @@ export const DiffScreen = ({ branch, onBack }: DiffScreenProps) => {
   return (
     <Box flexDirection="column">
       <Box paddingX={1}>
-        <Text bold>Diff: main...{branch}</Text>
+        <Text bold>Diff: {baseBranch}...{branch}</Text>
         <Text dimColor>  ({position})</Text>
       </Box>
       <Box flexDirection="column" paddingX={1}>

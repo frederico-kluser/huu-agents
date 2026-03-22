@@ -22,6 +22,7 @@ interface PipelineResult {
   readonly nodes: readonly DAGNode[];
   readonly results: readonly WorkerResult[];
   readonly branch: string;
+  readonly baseBranch: string;
   readonly diffStat: string;
 }
 
@@ -29,6 +30,7 @@ interface PipelineResult {
 interface RetryContext {
   readonly dag: DAG;
   readonly branch: string;
+  readonly baseBranch: string;
   readonly previousResults: readonly WorkerResult[];
 }
 
@@ -179,7 +181,7 @@ export const App = ({ cliArgs }: AppProps) => {
       setPipeline((prev) => ({
         ...prev,
         retryContext: null,
-        result: { dag, nodes: dag.nodes, results: progress.results, branch: progress.branch, diffStat: progress.diffStat },
+        result: { dag, nodes: dag.nodes, results: progress.results, branch: progress.branch, baseBranch: progress.baseBranch, diffStat: progress.diffStat },
       }));
       setScreen('result');
     };
@@ -191,6 +193,7 @@ export const App = ({ cliArgs }: AppProps) => {
           config: pipeline.config!,
           dag: pipeline.retryContext.dag,
           branch: pipeline.retryContext.branch,
+          baseBranch: pipeline.retryContext.baseBranch,
           previousResults: pipeline.retryContext.previousResults,
           onProgress,
         });
@@ -223,6 +226,7 @@ export const App = ({ cliArgs }: AppProps) => {
       retryContext: prev.result ? {
         dag: prev.result.dag,
         branch: prev.result.branch,
+        baseBranch: prev.result.baseBranch,
         previousResults: prev.result.results,
       } : null,
     }));
@@ -297,7 +301,7 @@ export const App = ({ cliArgs }: AppProps) => {
     return (
       <Box flexDirection="column">
         {statusBarEl}
-        <DiffScreen branch={pipeline.result.branch} onBack={() => setScreen('result')} />
+        <DiffScreen branch={pipeline.result.branch} baseBranch={pipeline.result.baseBranch} onBack={() => setScreen('result')} />
       </Box>
     );
   }

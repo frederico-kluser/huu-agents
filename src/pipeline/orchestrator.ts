@@ -13,7 +13,7 @@ import { executeDAG, type WorkerFn } from './dag-executor.js';
 import { retryWorker, type RetryConfig } from './retry-handler.js';
 import { runWorker, type WorkerProgressEvent } from '../agents/worker-runner.js';
 import { generateWorkerPrompt } from '../prompts/worker.prompt.js';
-import { createBranch, execGit } from '../git/git-wrapper.js';
+import { createBranch, execGit, getCurrentBranch } from '../git/git-wrapper.js';
 import type { MergeStrategy } from '../git/conflict-resolver.js';
 import type { Config } from '../schemas/config.schema.js';
 import type { DAG, DAGNode } from '../schemas/dag.schema.js';
@@ -28,6 +28,7 @@ export interface PipelineProgress {
   readonly results: readonly WorkerResult[];
   readonly activeNodeId: string | null;
   readonly branch: string;
+  readonly baseBranch: string;
   readonly diffStat: string;
   readonly error: string | null;
 }
@@ -46,6 +47,7 @@ export interface RetryPipelineConfig {
   readonly config: Config;
   readonly dag: DAG;
   readonly branch: string;
+  readonly baseBranch: string;
   readonly previousResults: readonly WorkerResult[];
   readonly onProgress: (progress: PipelineProgress) => void;
 }
@@ -90,8 +92,8 @@ async function getGitLog(worktreePath: string): Promise<string> {
 }
 
 /** Obtém diff stat da branch para a tela de resultado */
-async function getDiffStat(branch: string): Promise<string> {
-  const result = await execGit(['diff', '--stat', `main...${branch}`], process.cwd());
+async function getDiffStat(baseBranch: string, branch: string): Promise<string> {
+  const result = await execGit(['diff', '--stat', `${baseBranch}...${branch}`], process.cwd());
   return result.ok ? result.value : 'sem diff disponível';
 }
 
@@ -186,10 +188,11 @@ function buildResult(
   results: WorkerResult[],
   activeNodeId: string | null,
   branch: string,
+  baseBranch: string,
   diffStat: string,
   error: string | null,
 ): PipelineProgress {
-  return { phase, dag, logs, results, activeNodeId, branch, diffStat, error };
+  return { phase, dag, logs, results, activeNodeId, branch, baseBranch, diffStat, error };
 }
 
 // --- Pipeline principal ---
@@ -212,13 +215,17 @@ export async function runPipeline(
   let currentDAG: DAG | null = null;
   let activeNodeId: string | null = null;
 
+  // Capturar branch base antes de criar a branch de task
+  const baseBranchResult = await getCurrentBranch();
+  const baseBranch = baseBranchResult.ok ? baseBranchResult.value : 'main';
+
   const emit = (
     phase: PipelineProgress['phase'],
     extra?: Partial<Pick<PipelineProgress, 'error' | 'diffStat'>>,
   ) => {
     onProgress({
       phase, dag: currentDAG, logs: [...logs], results: [...results],
-      activeNodeId, branch, diffStat: extra?.diffStat ?? '', error: extra?.error ?? null,
+      activeNodeId, branch, baseBranch, diffStat: extra?.diffStat ?? '', error: extra?.error ?? null,
     });
   };
 
@@ -240,7 +247,7 @@ export async function runPipeline(
     const branchResult = await createBranch(branch);
     if (!branchResult.ok) {
       emit('error', { error: `Falha ao criar branch: ${branchResult.error.message}` });
-      return buildResult('error', currentDAG, logs, results, activeNodeId, branch, '', branchResult.error.message);
+      return buildResult('error', currentDAG, logs, results, activeNodeId, branch, baseBranch, '', branchResult.error.message);
     }
 
     const emitter = createExecutionEmitter(currentDAG, results, logs, (id) => {
@@ -251,13 +258,13 @@ export async function runPipeline(
 
     await executeDAG(currentDAG, timestamp, workerFn, emitter, undefined, config.maxConcurrency);
 
-    const diffStat = await getDiffStat(branch);
+    const diffStat = await getDiffStat(baseBranch, branch);
     emit('done', { diffStat });
-    return buildResult('done', currentDAG, logs, results, null, branch, diffStat, null);
+    return buildResult('done', currentDAG, logs, results, null, branch, baseBranch, diffStat, null);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     emit('error', { error: msg });
-    return buildResult('error', currentDAG, logs, results, activeNodeId, branch, '', msg);
+    return buildResult('error', currentDAG, logs, results, activeNodeId, branch, baseBranch, '', msg);
   }
 }
 
@@ -278,7 +285,7 @@ export async function runPipeline(
 export async function retryPipeline(
   retryConfig: RetryPipelineConfig,
 ): Promise<PipelineProgress> {
-  const { config, dag, branch, previousResults, onProgress } = retryConfig;
+  const { config, dag, branch, baseBranch, previousResults, onProgress } = retryConfig;
   const timestamp = branch.slice('task-'.length);
 
   // Nodes com resultado success/partial são preservados e pulados
@@ -308,7 +315,7 @@ export async function retryPipeline(
   ) => {
     onProgress({
       phase, dag: currentDAG, logs: [...logs], results: [...results],
-      activeNodeId, branch, diffStat: extra?.diffStat ?? '', error: extra?.error ?? null,
+      activeNodeId, branch, baseBranch, diffStat: extra?.diffStat ?? '', error: extra?.error ?? null,
     });
   };
 
@@ -323,12 +330,12 @@ export async function retryPipeline(
 
     await executeDAG(currentDAG, timestamp, workerFn, emitter, completedIds, config.maxConcurrency);
 
-    const diffStat = await getDiffStat(branch);
+    const diffStat = await getDiffStat(baseBranch, branch);
     emit('done', { diffStat });
-    return buildResult('done', currentDAG, logs, results, null, branch, diffStat, null);
+    return buildResult('done', currentDAG, logs, results, null, branch, baseBranch, diffStat, null);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     emit('error', { error: msg });
-    return buildResult('error', currentDAG, logs, results, activeNodeId, branch, '', msg);
+    return buildResult('error', currentDAG, logs, results, activeNodeId, branch, baseBranch, '', msg);
   }
 }

@@ -122,9 +122,10 @@ export const executeDAG = async (
   taskTimestamp: string,
   workerFn: WorkerFn,
   emitter?: EventEmitter,
+  completedNodeIds?: ReadonlySet<string>,
 ): Promise<ExecutionResult> => {
   const nodeMap = new Map(dag.nodes.map((n): [string, DAGNode] => [n.id, n]));
-  const completed = new Set<string>();
+  const completed = new Set<string>(completedNodeIds);
   const failed = new Set<string>();
   const blocked = new Set<string>();
 
@@ -186,7 +187,7 @@ export const executeDAG = async (
   };
 
   for (const wave of waves) {
-    const executable = wave.filter(id => !blocked.has(id));
+    const executable = wave.filter(id => !blocked.has(id) && !completed.has(id));
     if (executable.length === 0) continue;
 
     const settled = await Promise.allSettled(

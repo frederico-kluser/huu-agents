@@ -8,18 +8,26 @@ import { ResultScreen } from './screens/result-screen.js';
 import { DiffScreen } from './screens/diff-screen.js';
 import { StatusBar } from './components/status-bar.js';
 import { useConfig } from './hooks/use-config.js';
-import { runPipeline, type PipelineProgress } from './pipeline/orchestrator.js';
+import { runPipeline, retryPipeline, type PipelineProgress } from './pipeline/orchestrator.js';
 import type { Config } from './schemas/config.schema.js';
-import type { DAGNode } from './schemas/dag.schema.js';
+import type { DAG, DAGNode } from './schemas/dag.schema.js';
 import type { WorkerResult } from './schemas/worker-result.schema.js';
 
 type Screen = 'loading' | 'config' | 'context' | 'task' | 'executing' | 'result' | 'diff' | 'model-change';
 
 interface PipelineResult {
+  readonly dag: DAG;
   readonly nodes: readonly DAGNode[];
   readonly results: readonly WorkerResult[];
   readonly branch: string;
   readonly diffStat: string;
+}
+
+/** Contexto para retry seletivo — preservado entre result → executing */
+interface RetryContext {
+  readonly dag: DAG;
+  readonly branch: string;
+  readonly previousResults: readonly WorkerResult[];
 }
 
 interface PipelineState {
@@ -30,11 +38,12 @@ interface PipelineState {
   readonly result: PipelineResult | null;
   readonly progress: PipelineProgress | null;
   readonly previousScreen: Screen | null;
+  readonly retryContext: RetryContext | null;
 }
 
 const INITIAL_STATE: PipelineState = {
   config: null, contextFiles: [], macroTask: '',
-  startTime: 0, result: null, progress: null, previousScreen: null,
+  startTime: 0, result: null, progress: null, previousScreen: null, retryContext: null,
 };
 
 /**
@@ -98,33 +107,66 @@ export const App = () => {
   }, []);
 
   useEffect(() => {
-    if (screen !== 'executing' || !pipeline.config || !pipeline.macroTask) return;
+    if (screen !== 'executing' || !pipeline.config) return;
     let cancelled = false;
-    const run = async () => {
-      const result = await runPipeline({
-        config: pipeline.config!,
-        macroTask: pipeline.macroTask,
-        contextFiles: pipeline.contextFiles,
-        rootPath: process.cwd(),
-        onProgress: (progress) => {
-          if (!cancelled) setPipeline((prev) => ({ ...prev, progress }));
-        },
-      });
+
+    const onProgress = (progress: PipelineProgress) => {
+      if (!cancelled) setPipeline((prev) => ({ ...prev, progress }));
+    };
+
+    const handleResult = (progress: PipelineProgress) => {
       if (cancelled) return;
-      if ('type' in result && result.type === 'clarify') { setScreen('task'); return; }
-      const progress = result as PipelineProgress;
+      const dag = progress.dag ?? { action: 'decompose' as const, nodes: [], metadata: { macroTask: '', totalNodes: 0, parallelizable: 0 } };
       setPipeline((prev) => ({
         ...prev,
-        result: { nodes: progress.dag?.nodes ?? [], results: progress.results, branch: progress.branch, diffStat: progress.diffStat },
+        retryContext: null,
+        result: { dag, nodes: dag.nodes, results: progress.results, branch: progress.branch, diffStat: progress.diffStat },
       }));
       setScreen('result');
     };
+
+    const run = async () => {
+      if (pipeline.retryContext) {
+        // Retry seletivo: reutiliza DAG/branch, pula planner
+        const result = await retryPipeline({
+          config: pipeline.config!,
+          dag: pipeline.retryContext.dag,
+          branch: pipeline.retryContext.branch,
+          previousResults: pipeline.retryContext.previousResults,
+          onProgress,
+        });
+        handleResult(result);
+      } else {
+        // Execução completa: planner → DAG → workers
+        if (!pipeline.macroTask) return;
+        const result = await runPipeline({
+          config: pipeline.config!,
+          macroTask: pipeline.macroTask,
+          contextFiles: pipeline.contextFiles,
+          rootPath: process.cwd(),
+          onProgress,
+        });
+        if (cancelled) return;
+        if ('type' in result && result.type === 'clarify') { setScreen('task'); return; }
+        handleResult(result as PipelineProgress);
+      }
+    };
+
     void run();
     return () => { cancelled = true; };
-  }, [screen, pipeline.config, pipeline.macroTask, pipeline.contextFiles]);
+  }, [screen, pipeline.config, pipeline.macroTask, pipeline.contextFiles, pipeline.retryContext]);
 
   const handleRetry = useCallback(() => {
-    setPipeline((prev) => ({ ...prev, startTime: Date.now(), progress: null }));
+    setPipeline((prev) => ({
+      ...prev,
+      startTime: Date.now(),
+      progress: null,
+      retryContext: prev.result ? {
+        dag: prev.result.dag,
+        branch: prev.result.branch,
+        previousResults: prev.result.results,
+      } : null,
+    }));
     setScreen('executing');
   }, []);
 

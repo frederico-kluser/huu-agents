@@ -58,8 +58,7 @@ export const ResultScreen = ({
   const failed = nodes.filter((n) => n.status === 'failed').length;
   const blocked = nodes.filter((n) => n.status === 'pending').length;
   const allPassed = failed === 0 && blocked === 0;
-  const failedResults = results.filter((r) => r.status === 'failure');
-  const failedNodeIds = failedResults.map((r) => r.nodeId);
+  const failedNodeIds = nodes.filter((n) => n.status === 'failed').map((n) => n.id);
 
   useInput((input) => {
     if (input === 'q') {
@@ -103,17 +102,18 @@ export const ResultScreen = ({
         </Box>
       </Box>
 
-      {failedResults.length > 0 && (
+      {failedNodeIds.length > 0 && (
         <Box flexDirection="column" marginTop={1} borderStyle="single" borderColor="red" paddingX={1}>
           <Text bold color="red">Nodes falhados</Text>
-          {failedResults.map((r) => {
-            const node = nodes.find((n) => n.id === r.nodeId);
+          {failedNodeIds.map((nodeId) => {
+            const node = nodes.find((n) => n.id === nodeId);
+            const result = results.find((r) => r.nodeId === nodeId);
             return (
-              <Box key={r.nodeId} marginTop={0}>
+              <Box key={nodeId} marginTop={0}>
                 <Text color="red">{'x '}</Text>
-                <Text bold>{r.nodeId}</Text>
+                <Text bold>{nodeId}</Text>
                 <Text dimColor>{' — '}{node?.task ?? 'unknown'}</Text>
-                {r.error && <Text color="red">{'\n  '}{r.error}</Text>}
+                {result?.error && <Text color="red">{'\n  '}{result.error}</Text>}
               </Box>
             );
           })}

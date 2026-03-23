@@ -288,7 +288,15 @@ export async function runPipeline(
     });
     const workerFn = createWorkerFn(config, logs, () => emit('executing'), activeProfile);
 
-    await executeDAG(currentDAG, timestamp, workerFn, emitter, undefined, config.maxConcurrency);
+    await executeDAG(
+      currentDAG,
+      timestamp,
+      workerFn,
+      emitter,
+      undefined,
+      config.maxConcurrency,
+      activeProfile?.seats,
+    );
 
     const diffStat = await getDiffStat(baseBranch, branch);
     emit('done', { diffStat });
@@ -360,7 +368,15 @@ export async function retryPipeline(
     });
     const workerFn = createWorkerFn(config, logs, () => emit('executing'), activeProfile);
 
-    await executeDAG(currentDAG, timestamp, workerFn, emitter, completedIds, config.maxConcurrency);
+    await executeDAG(
+      currentDAG,
+      timestamp,
+      workerFn,
+      emitter,
+      completedIds,
+      config.maxConcurrency,
+      activeProfile?.seats,
+    );
 
     const diffStat = await getDiffStat(baseBranch, branch);
     emit('done', { diffStat });

@@ -85,11 +85,13 @@ Perfis definem pipelines multi-step dentro de cada worker. O DAG permanece como 
 
 **Fluxo:** task → profile-select → executing. Sem perfil = comportamento original preservado.
 
+**Schema do perfil:** `id` em kebab-case como label principal, `seats` (1-16) para limitar concorrência por perfil e `initialVariables` para seed de variáveis `custom_*`.
+
 **Atalho [o] opcoes:** acessível de qualquer tela (exceto config/loading/executing). Permite trocar modelo planner ou worker individualmente (catálogo completo de 18 modelos) e criar pipeline profiles. Legenda `[o] opcoes` aparece no rodapé de cada tela.
 
-**Validação:** Zod `superRefine` (entryStepId, set_variable XOR) + `validateProfileReferences()` (integridade referencial de targets)
+**Validação:** Zod `superRefine` (entryStepId, set_variable XOR, step IDs duplicados, namespace de initialVariables) + `validateProfileReferences()` (integridade referencial de targets)
 
-**Runtime:** imutável (spread operators), loop guard via `maxStepExecutions`, trace com timestamps epoch
+**Runtime:** imutável (spread operators), seed de `initialVariables`, loop guard via `maxStepExecutions`, trace com timestamps epoch
 
 ## Convenções de código
 

@@ -69,7 +69,7 @@ export interface PipelineRunConfig {
  */
 export async function runWorkerPipeline(config: PipelineRunConfig): Promise<WorkerResult> {
   const { profile, task, nodeId, worktreePath, apiKey, onProgress, onStepComplete } = config;
-  const state = createInitialState(profile.entryStepId, task);
+  const state = createInitialState(profile.entryStepId, task, profile.initialVariables);
 
   const ctx: StepHandlerContext = {
     worktreePath,
@@ -78,7 +78,10 @@ export async function runWorkerPipeline(config: PipelineRunConfig): Promise<Work
     onProgress,
   };
 
-  onProgress?.(`Pipeline "${profile.name}" started (max ${profile.maxStepExecutions} steps)`);
+  onProgress?.(
+    `Pipeline "${profile.id}" started `
+    + `(loop guard: ${profile.maxStepExecutions}, seats: ${profile.seats})`,
+  );
 
   try {
     const finalState = await executeLoop(profile, state, ctx, onStepComplete);
@@ -108,7 +111,7 @@ async function executeLoop(
       return {
         ...state,
         status: 'failed',
-        failureReason: `Step execution limit reached (${profile.maxStepExecutions}). `
+        failureReason: `Loop guard reached (${profile.maxStepExecutions} step executions). `
           + `Last step: ${state.currentStepId}. This may indicate an infinite loop.`,
       };
     }

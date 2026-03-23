@@ -1,19 +1,23 @@
 /**
- * Builder visual para criar/editar perfis de worker pipeline.
- * Baseado em dWvt6 — wizard multi-fase com TextInput e SelectInput do Ink.
- *
- * Fases: metadata -> add steps -> review -> save.
- * Suporta edição de perfil existente.
+ * Tela do builder de perfis no formato config-card.
+ * Usa hook dedicado para manter o arquivo enxuto.
  */
 
 import { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
-import type { WorkerProfile, WorkerStep, StepType, ProfileScope } from '../schemas/worker-profile.schema.js';
-
-type BuilderPhase = 'meta' | 'steps' | 'add-step' | 'review';
-type MetaField = 'id' | 'name' | 'description' | 'scope' | 'maxStepExecutions';
+import { modelLabel, HEADER_FIELD_DESCRIPTIONS, ConfigRow, SelectorRow } from '../components/builder-helpers.js';
+import { buildTargetOptions } from '../components/step-field-defs.js';
+import { StepEditor } from '../components/step-editor.js';
+import { PipelineGraph } from '../components/pipeline-graph.js';
+import {
+  HEADER_KEYS,
+  useProfileBuilderState,
+  type EditingContext,
+} from '../components/profile-builder-state.js';
+import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
+import type { HeaderFieldKey } from '../components/builder-helpers.js';
 
 interface ProfileBuilderScreenProps {
   readonly existingProfile?: WorkerProfile;
@@ -21,353 +25,330 @@ interface ProfileBuilderScreenProps {
   readonly onCancel: () => void;
 }
 
-const STEP_TYPE_OPTIONS: Array<{ label: string; value: StepType }> = [
-  { label: 'Pi Agent - executa agente IA no worktree', value: 'pi_agent' },
-  { label: 'LangChain Prompt - gera/refina texto via LLM', value: 'langchain_prompt' },
-  { label: 'Condition - avalia expressao e bifurca', value: 'condition' },
-  { label: 'Goto - pula para outro step', value: 'goto' },
-  { label: 'Set Variable - define variavel', value: 'set_variable' },
-  { label: 'Git Diff - captura diff atual', value: 'git_diff' },
-  { label: 'Fail - encerra com erro explicito', value: 'fail' },
-];
-
-const SCOPE_OPTIONS: Array<{ label: string; value: ProfileScope }> = [
-  { label: 'Projeto (local)', value: 'project' },
-  { label: 'Global (usuario)', value: 'global' },
-];
-
 /**
- * Builder visual de perfis. Guia o usuario por fases: metadata -> steps -> review.
+ * Builder visual de perfis.
  *
- * @param props.existingProfile - Perfil para editar (undefined = novo)
- * @param props.onSave - Callback com perfil completo
- * @param props.onCancel - Callback de cancelamento (ESC)
+ * @param props - Props da tela
+ * @returns Tela de criacao/edicao de perfil
+ *
+ * @example
+ * <ProfileBuilderScreen onSave={save} onCancel={back} />
  */
-export const ProfileBuilderScreen = ({
-  existingProfile,
-  onSave,
-  onCancel,
-}: ProfileBuilderScreenProps) => {
-  const [phase, setPhase] = useState<BuilderPhase>(existingProfile ? 'review' : 'meta');
-  const [meta, setMeta] = useState({
-    id: existingProfile?.id ?? '',
-    name: existingProfile?.name ?? '',
-    description: existingProfile?.description ?? '',
-    scope: existingProfile?.scope ?? 'project' as ProfileScope,
-    maxStepExecutions: existingProfile?.maxStepExecutions ?? 20,
-  });
-  const [metaField, setMetaField] = useState<MetaField>('id');
-  const [steps, setSteps] = useState<WorkerStep[]>(
-    existingProfile ? [...existingProfile.steps] : [],
-  );
-  const [newStepType, setNewStepType] = useState<StepType | null>(null);
-  const [newStepFields, setNewStepFields] = useState<Record<string, string>>({});
-  const [newStepFieldIndex, setNewStepFieldIndex] = useState(0);
+export const ProfileBuilderScreen = ({ existingProfile, onSave, onCancel }: ProfileBuilderScreenProps) => {
+  const state = useProfileBuilderState({ existingProfile, onSave, onCancel });
 
-  useInput((_input, key) => {
-    if (key.escape) onCancel();
+  useInput((input, key) => {
+    if (state.editing.mode !== 'none') {
+      if (key.escape) {
+        state.setEditing({ mode: 'none' });
+      }
+      return;
+    }
+
+    if (key.escape) {
+      onCancel();
+      return;
+    }
+    if (input === 'j' || key.downArrow) {
+      state.setSelectedIndex((prev) => Math.min(state.items.length - 1, prev + 1));
+      return;
+    }
+    if (input === 'k' || key.upArrow) {
+      state.setSelectedIndex((prev) => Math.max(0, prev - 1));
+      return;
+    }
+    if (key.return) {
+      state.handleEnter();
+      return;
+    }
+    if (input === 'a') {
+      state.openCreateStep();
+      return;
+    }
+    if (input === 'b') {
+      state.openBranchOnCondition();
+      return;
+    }
+    if (input === 'v') {
+      state.startAddVariable();
+      return;
+    }
+    if (input === 'x') {
+      state.handleDelete();
+      return;
+    }
+    if (input === 's') {
+      state.saveProfile();
+    }
   });
 
-  // --- Meta phase ---
-  if (phase === 'meta') {
+  if (state.editing.mode === 'field-input') {
+    const context = state.editing;
     return (
-      <MetaEditor
-        meta={meta}
-        field={metaField}
-        onFieldChange={(field, value) => setMeta((prev) => ({ ...prev, [field]: value }))}
-        onNextField={(nextField) => {
-          if (nextField === null) {
-            setPhase('steps');
-          } else {
-            setMetaField(nextField);
-          }
+      <TextInputEditor
+        context={context}
+        onSubmit={(value) => {
+          state.applyTextField(context.field, value);
+          state.setEditing({ mode: 'none' });
         }}
       />
     );
   }
-
-  // --- Steps phase ---
-  if (phase === 'steps') {
+  if (state.editing.mode === 'field-select') {
+    const context = state.editing;
     return (
-      <StepListEditor
-        steps={steps}
-        onAddStep={() => {
-          setNewStepType(null);
-          setNewStepFields({});
-          setNewStepFieldIndex(0);
-          setPhase('add-step');
+      <SelectEditor
+        context={context}
+        onSelect={(value) => {
+          state.applySelectField(context.field, value);
+          state.setEditing({ mode: 'none' });
         }}
-        onRemoveStep={(index) => setSteps((prev) => prev.filter((_, i) => i !== index))}
-        onDone={() => setPhase('review')}
       />
     );
   }
-
-  // --- Add step phase ---
-  if (phase === 'add-step') {
-    if (!newStepType) {
-      return (
-        <Box flexDirection="column" padding={1}>
-          <Text bold color="cyan">Tipo do step:</Text>
-          <SelectInput
-            items={STEP_TYPE_OPTIONS}
-            onSelect={(item) => {
-              setNewStepType(item.value as StepType);
-              setNewStepFields({ id: '' });
-              setNewStepFieldIndex(0);
-            }}
-          />
-        </Box>
-      );
-    }
-
-    const fields = getFieldsForStepType(newStepType);
-    const currentField = fields[newStepFieldIndex];
-
-    if (!currentField) {
-      const step = buildStep(newStepType, newStepFields);
-      if (step) setSteps((prev) => [...prev, step]);
-      setPhase('steps');
-      return null;
-    }
-
+  if (state.editing.mode === 'step-editor') {
+    const context = state.editing;
     return (
-      <Box flexDirection="column" padding={1}>
-        <Text bold color="cyan">Novo step ({newStepType}) - {currentField.label}:</Text>
-        <Text dimColor>{currentField.hint}</Text>
-        <Box marginTop={1}>
-          <Text color="cyan">{'> '}</Text>
-          <TextInput
-            value={newStepFields[currentField.key] ?? ''}
-            onChange={(val) => setNewStepFields((prev) => ({ ...prev, [currentField.key]: val }))}
-            onSubmit={() => setNewStepFieldIndex((i) => i + 1)}
-            placeholder={currentField.placeholder}
-          />
-        </Box>
-      </Box>
-    );
-  }
-
-  // --- Review phase ---
-  const entryStepId = steps[0]?.id ?? '';
-  return (
-    <Box flexDirection="column" padding={1}>
-      <Box borderStyle="round" borderColor="green" paddingX={2} paddingY={1} flexDirection="column">
-        <Text bold color="green">Revisar Perfil</Text>
-        <Box flexDirection="column" marginTop={1}>
-          <Text><Text dimColor>ID:    </Text><Text bold>{meta.id}</Text></Text>
-          <Text><Text dimColor>Nome:  </Text>{meta.name}</Text>
-          <Text><Text dimColor>Scope: </Text>{meta.scope}</Text>
-          <Text><Text dimColor>Entry: </Text>{entryStepId || '(nenhum)'}</Text>
-          <Text><Text dimColor>Limit: </Text>{meta.maxStepExecutions}</Text>
-          <Text><Text dimColor>Steps: </Text>{steps.length}</Text>
-        </Box>
-        <Box flexDirection="column" marginTop={1}>
-          {steps.map((s, i) => (
-            <Text key={s.id}>
-              <Text dimColor>{`  ${i + 1}. `}</Text>
-              <Text>{s.id}</Text>
-              <Text dimColor>{` (${s.type})`}</Text>
-            </Text>
-          ))}
-        </Box>
-      </Box>
-      <Box marginTop={1}>
-        <SelectInput
-          items={[
-            { label: 'Salvar', value: 'save' },
-            { label: 'Editar steps', value: 'steps' },
-            { label: 'Editar metadados', value: 'meta' },
-            { label: 'Cancelar', value: 'cancel' },
-          ]}
-          onSelect={(item) => {
-            if (item.value === 'save') {
-              const profile: WorkerProfile = {
-                ...meta,
-                entryStepId,
-                steps,
-              };
-              onSave(profile);
-            } else if (item.value === 'steps') {
-              setPhase('steps');
-            } else if (item.value === 'meta') {
-              setMetaField('id');
-              setPhase('meta');
-            } else {
-              onCancel();
-            }
+      <Box padding={1}>
+        <StepEditor
+          mode={context.action}
+          stepId={context.stepId}
+          existingStep={context.existingStep}
+          nextTarget={context.nextTarget}
+          validTargets={new Set(buildTargetOptions(state.steps))}
+          onCancel={() => state.setEditing({ mode: 'none' })}
+          onSave={(step) => {
+            state.applyStepEdit(context, step);
+            state.setEditing({ mode: 'none' });
           }}
         />
       </Box>
+    );
+  }
+  if (state.editing.mode === 'variable-add') {
+    return (
+      <VariableAddEditor
+        context={state.editing}
+        onChange={(next) => state.setEditing(next)}
+        onDone={() => state.setEditing({ mode: 'none' })}
+        onConfirm={(name, value) => state.confirmAddVariable(name, value)}
+      />
+    );
+  }
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
+        <Text bold color="cyan">Criar Pipeline Profile</Text>
+        <Text dimColor>Config-card: todos os campos visiveis. Enter para editar.</Text>
+
+        <Box marginTop={1} flexDirection="column">
+          {HEADER_KEYS.map((keyName) => renderHeaderRow(keyName))}
+        </Box>
+
+        {state.selectedItem?.kind === 'header' && (
+          <Box marginTop={1}>
+            <Text dimColor>{HEADER_FIELD_DESCRIPTIONS[state.selectedItem.key as HeaderFieldKey]}</Text>
+          </Box>
+        )}
+
+        <Box marginTop={1} flexDirection="column">
+          <Text bold>── Variaveis ──</Text>
+          <Text dimColor>Reservadas (auto): $task  $diff  $error</Text>
+          {state.sortedVariables.length === 0 && <Text dimColor>Custom: (nenhuma)</Text>}
+          {state.sortedVariables.map(([name, value]) => {
+            const selected = state.selectedItem?.kind === 'variable' && state.selectedItem.key === name;
+            return (
+              <Box key={name}>
+                <Text color={selected ? 'cyan' : 'white'}>
+                  {selected ? '> ' : '  '}
+                  ${name} = {String(value)}
+                </Text>
+                <Text dimColor>  [x]</Text>
+              </Box>
+            );
+          })}
+          <Text dimColor>[v] adicionar variavel  [Enter] editar valor  [x] deletar</Text>
+        </Box>
+
+        <Box marginTop={1} flexDirection="column">
+          <Text bold>── Steps ──</Text>
+          <PipelineGraph
+            steps={state.orderedSteps}
+            selectedStepId={state.selectedItem?.kind === 'step' ? state.selectedItem.key : null}
+          />
+        </Box>
+
+        <Box marginTop={1} gap={2}>
+          <Text dimColor>[j/k] navegar</Text>
+          <Text dimColor>[Enter] editar</Text>
+          <Text dimColor>[a] add step</Text>
+          <Text dimColor>[b] add branch</Text>
+          <Text dimColor>[v] add var</Text>
+          <Text dimColor>[x] delete</Text>
+          <Text dimColor>[s] save</Text>
+          <Text dimColor>[ESC] cancel</Text>
+        </Box>
+
+        {state.validationErrors.length > 0 && (
+          <Box marginTop={1} flexDirection="column">
+            <Text color="red" bold>Erros de validacao:</Text>
+            {state.validationErrors.map((error) => (
+              <Text key={error} color="red" dimColor>{`- ${error}`}</Text>
+            ))}
+          </Box>
+        )}
+      </Box>
     </Box>
   );
+
+  function renderHeaderRow(keyName: HeaderFieldKey) {
+    const selected = state.selectedItem?.kind === 'header' && state.selectedItem.key === keyName;
+    const invalid = Boolean(state.fieldErrors[keyName]);
+    switch (keyName) {
+      case 'id':
+        return <ConfigRow label="Profile ID" value={state.meta.id} selected={selected} required invalid={invalid} />;
+      case 'scope':
+        return <SelectorRow label="Scope" value={state.meta.scope} selected={selected} invalid={invalid} />;
+      case 'entryStepId':
+        return (
+          <SelectorRow
+            label="Entry Step"
+            value={state.entryStepId.length > 0 ? state.entryStepId : '(auto)'}
+            selected={selected}
+            invalid={invalid}
+          />
+        );
+      case 'maxStepExecutions':
+        return (
+          <ConfigRow
+            label="Max step executions (loop guard)"
+            value={String(state.meta.maxStepExecutions)}
+            selected={selected}
+            required
+            invalid={invalid}
+          />
+        );
+      case 'seats':
+        return (
+          <ConfigRow
+            label="Assentos (paralelismo)"
+            value={String(state.meta.seats)}
+            selected={selected}
+            required
+            invalid={invalid}
+          />
+        );
+      case 'workerModel':
+        return (
+          <SelectorRow
+            label="Worker Model"
+            value={modelLabel(state.meta.workerModel)}
+            selected={selected}
+            invalid={invalid}
+          />
+        );
+      case 'langchainModel':
+        return (
+          <SelectorRow
+            label="LangChain Model"
+            value={modelLabel(state.meta.langchainModel)}
+            selected={selected}
+            invalid={invalid}
+          />
+        );
+      case 'description':
+        return <ConfigRow label="Description" value={state.meta.description} selected={selected} invalid={invalid} />;
+    }
+  }
 };
 
-// --- Sub-components ---
+interface TextInputEditorProps {
+  readonly context: Extract<EditingContext, { mode: 'field-input' }>;
+  readonly onSubmit: (value: string) => void;
+}
 
-const META_FIELDS: Array<{ key: MetaField; label: string; next: MetaField | null; isSelect?: boolean }> = [
-  { key: 'id', label: 'ID do perfil (kebab-case)', next: 'name' },
-  { key: 'name', label: 'Nome do perfil', next: 'description' },
-  { key: 'description', label: 'Descricao (opcional)', next: 'scope' },
-  { key: 'scope', label: 'Escopo', next: 'maxStepExecutions', isSelect: true },
-  { key: 'maxStepExecutions', label: 'Limite de execucoes (padrao: 20)', next: null },
-];
-
-function MetaEditor({
-  meta, field, onFieldChange, onNextField,
-}: {
-  readonly meta: Record<string, string | number>;
-  readonly field: MetaField;
-  readonly onFieldChange: (field: MetaField, value: string | number) => void;
-  readonly onNextField: (next: MetaField | null) => void;
-}) {
-  const fieldDef = META_FIELDS.find((f) => f.key === field);
-  if (!fieldDef) return null;
-
-  if (fieldDef.isSelect && field === 'scope') {
-    return (
-      <Box flexDirection="column" padding={1}>
-        <Text bold color="cyan">{fieldDef.label}:</Text>
-        <SelectInput
-          items={SCOPE_OPTIONS}
-          onSelect={(item) => {
-            onFieldChange('scope', item.value as string);
-            onNextField(fieldDef.next);
-          }}
-        />
-      </Box>
-    );
-  }
-
+function TextInputEditor({ context, onSubmit }: TextInputEditorProps) {
+  const [value, setValue] = useState(context.initialValue);
   return (
-    <Box flexDirection="column" padding={1}>
-      <Text bold color="cyan">{fieldDef.label}:</Text>
-      <Box marginTop={1}>
-        <Text color="cyan">{'> '}</Text>
-        <TextInput
-          value={String(meta[field] ?? '')}
-          onChange={(val) => onFieldChange(field, val)}
-          onSubmit={(val) => {
-            if (field === 'maxStepExecutions') {
-              const parsed = parseInt(val, 10);
-              onFieldChange(field, isNaN(parsed) ? 20 : Math.min(100, Math.max(1, parsed)));
-            }
-            onNextField(fieldDef.next);
-          }}
-        />
+    <Box padding={1}>
+      <Box borderStyle="round" borderColor="cyan" paddingX={1} paddingY={1} flexDirection="column">
+        <Text bold color="cyan">Editar campo</Text>
+        <Text dimColor>{String(context.field)}</Text>
+        <Box marginTop={1}>
+          <Text color="cyan">{'> '}</Text>
+          <TextInput value={value} onChange={setValue} onSubmit={onSubmit} />
+        </Box>
+        <Text dimColor>Enter confirma, ESC cancela</Text>
       </Box>
     </Box>
   );
 }
 
-function StepListEditor({
-  steps, onAddStep, onRemoveStep, onDone,
-}: {
-  readonly steps: readonly WorkerStep[];
-  readonly onAddStep: () => void;
-  readonly onRemoveStep: (index: number) => void;
+interface SelectEditorProps {
+  readonly context: Extract<EditingContext, { mode: 'field-select' }>;
+  readonly onSelect: (value: string) => void;
+}
+
+function SelectEditor({ context, onSelect }: SelectEditorProps) {
+  return (
+    <Box padding={1}>
+      <Box borderStyle="round" borderColor="cyan" paddingX={1} paddingY={1} flexDirection="column">
+        <Text bold color="cyan">Selecionar valor</Text>
+        <Text dimColor>{context.field}</Text>
+        <Box marginTop={1}>
+          <SelectInput
+            items={[...context.options]}
+            onSelect={(item) => onSelect(item.value)}
+            initialIndex={Math.max(0, context.options.findIndex((opt) => opt.value === context.initialValue))}
+          />
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+interface VariableAddEditorProps {
+  readonly context: Extract<EditingContext, { mode: 'variable-add' }>;
+  readonly onChange: (next: Extract<EditingContext, { mode: 'variable-add' }>) => void;
   readonly onDone: () => void;
-}) {
-  const items = [
-    { label: '+ Adicionar step', value: 'add' },
-    ...steps.map((s, i) => ({ label: `  ${s.id} (${s.type})`, value: `remove-${i}` })),
-    { label: 'Concluir steps', value: 'done' },
-  ];
+  readonly onConfirm: (name: string, value: string) => string | null;
+}
 
+function VariableAddEditor({ context, onChange, onDone, onConfirm }: VariableAddEditorProps) {
   return (
-    <Box flexDirection="column" padding={1}>
-      <Text bold color="cyan">Steps do perfil ({steps.length}):</Text>
-      <Text dimColor>Selecione um step para remover, ou adicione novo.</Text>
-      <Box marginTop={1}>
-        <SelectInput
-          items={items}
-          onSelect={(item) => {
-            if (item.value === 'add') onAddStep();
-            else if (item.value === 'done') onDone();
-            else if (item.value.startsWith('remove-')) {
-              onRemoveStep(parseInt(item.value.slice(7), 10));
-            }
-          }}
-        />
+    <Box padding={1}>
+      <Box borderStyle="round" borderColor="cyan" paddingX={1} paddingY={1} flexDirection="column">
+        <Text bold color="cyan">Adicionar variavel custom</Text>
+        <Text dimColor>Prefixo obrigatorio: custom_</Text>
+        <Box marginTop={1}>
+          <Text color={context.focus === 'name' ? 'cyan' : 'gray'}>Nome: </Text>
+          <TextInput
+            value={context.name}
+            onChange={(value) => onChange({ ...context, name: value })}
+            onSubmit={() => onChange({ ...context, focus: 'value' })}
+            placeholder="custom_tries"
+          />
+        </Box>
+        <Box marginTop={1}>
+          <Text color={context.focus === 'value' ? 'cyan' : 'gray'}>Valor inicial: </Text>
+          <TextInput
+            value={context.value}
+            onChange={(value) => onChange({ ...context, value })}
+            onSubmit={() => {
+              const maybeError = onConfirm(context.name, context.value);
+              if (maybeError) {
+                onChange({ ...context, error: maybeError });
+                return;
+              }
+              onDone();
+            }}
+            placeholder="0"
+          />
+        </Box>
+        {context.error && <Text color="red">{context.error}</Text>}
+        <Text dimColor>Enter confirma em cada campo, ESC cancela</Text>
       </Box>
     </Box>
   );
-}
-
-// --- Step field definitions ---
-
-interface StepFieldDef {
-  key: string;
-  label: string;
-  hint: string;
-  placeholder: string;
-}
-
-function getFieldsForStepType(type: StepType): StepFieldDef[] {
-  const id: StepFieldDef = { key: 'id', label: 'ID do step', hint: 'Identificador unico', placeholder: 'my-step' };
-  switch (type) {
-    case 'pi_agent':
-      return [id,
-        { key: 'taskTemplate', label: 'Task template', hint: 'Use $task, $diff, $custom_* para variaveis', placeholder: 'Use $task para...' },
-        { key: 'next', label: 'Proximo step ID', hint: 'ID do step seguinte ou __end__', placeholder: 'next-step' },
-      ];
-    case 'langchain_prompt':
-      return [id,
-        { key: 'inputTemplate', label: 'Input template', hint: 'Template com $variaveis para o LLM', placeholder: 'A task original foi: $task...' },
-        { key: 'outputTarget', label: 'Variavel de saida', hint: 'Onde armazenar o resultado (task, custom_*)', placeholder: 'task' },
-        { key: 'next', label: 'Proximo step ID', hint: '', placeholder: 'next-step' },
-      ];
-    case 'condition':
-      return [id,
-        { key: 'expression', label: 'Expressao', hint: 'Ex: $custom_pass == true', placeholder: '$custom_var == value' },
-        { key: 'whenTrue', label: 'Step se verdadeiro', hint: '', placeholder: 'step-true' },
-        { key: 'whenFalse', label: 'Step se falso', hint: '', placeholder: 'step-false' },
-      ];
-    case 'goto':
-      return [id,
-        { key: 'target', label: 'Step destino', hint: 'Use __end__ para encerrar com sucesso', placeholder: '__end__' },
-      ];
-    case 'set_variable':
-      return [id,
-        { key: 'target', label: 'Variavel alvo', hint: 'Ex: custom_tries', placeholder: 'custom_tries' },
-        { key: 'value', label: 'Valor (literal)', hint: 'Numero, string ou booleano', placeholder: '0' },
-        { key: 'next', label: 'Proximo step ID', hint: '', placeholder: 'next-step' },
-      ];
-    case 'git_diff':
-      return [id,
-        { key: 'target', label: 'Variavel alvo', hint: 'Normalmente "diff"', placeholder: 'diff' },
-        { key: 'next', label: 'Proximo step ID', hint: '', placeholder: 'next-step' },
-      ];
-    case 'fail':
-      return [id,
-        { key: 'messageTemplate', label: 'Mensagem de erro', hint: 'Use $variaveis', placeholder: 'Erro: $error' },
-      ];
-  }
-}
-
-/** Constrói WorkerStep a partir dos campos coletados. Retorna null se ID ausente. */
-function buildStep(type: StepType, fields: Record<string, string>): WorkerStep | null {
-  const id = fields['id'];
-  if (!id) return null;
-
-  switch (type) {
-    case 'pi_agent':
-      return { id, type, taskTemplate: fields['taskTemplate'] ?? '', next: fields['next'] ?? '' };
-    case 'langchain_prompt':
-      return { id, type, inputTemplate: fields['inputTemplate'] ?? '', outputTarget: fields['outputTarget'] ?? 'task', next: fields['next'] ?? '' };
-    case 'condition':
-      return { id, type, expression: fields['expression'] ?? '', whenTrue: fields['whenTrue'] ?? '', whenFalse: fields['whenFalse'] ?? '' };
-    case 'goto':
-      return { id, type, target: fields['target'] ?? '__end__' };
-    case 'set_variable': {
-      const raw = fields['value'] ?? '';
-      const numVal = Number(raw);
-      const value = raw === 'true' ? true : raw === 'false' ? false : !isNaN(numVal) && raw !== '' ? numVal : raw;
-      return { id, type, target: fields['target'] ?? '', value, next: fields['next'] ?? '' };
-    }
-    case 'git_diff':
-      return { id, type, target: fields['target'] ?? 'diff', next: fields['next'] ?? '' };
-    case 'fail':
-      return { id, type, messageTemplate: fields['messageTemplate'] ?? '' };
-  }
 }

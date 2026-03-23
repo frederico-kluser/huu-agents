@@ -111,7 +111,7 @@ export const ProfileSelectScreen = ({ projectRoot, onSelect }: ProfileSelectScre
             <Box>
               <Text color={isSelected ? 'cyan' : 'white'}>
                 {isSelected ? '> ' : '  '}
-                {profile.name}
+                {profile.id}
               </Text>
               <Text dimColor> [{profile.scope}]</Text>
             </Box>
@@ -123,7 +123,8 @@ export const ProfileSelectScreen = ({ projectRoot, onSelect }: ProfileSelectScre
             {isSelected && (
               <Box marginLeft={4} gap={2}>
                 <Text dimColor>Steps: {profile.steps.length}</Text>
-                <Text dimColor>Max: {profile.maxStepExecutions}</Text>
+                <Text dimColor>Loop guard: {profile.maxStepExecutions}</Text>
+                <Text dimColor>Seats: {profile.seats}</Text>
                 {profile.workerModel && <Text dimColor>Worker: {profile.workerModel}</Text>}
               </Box>
             )}

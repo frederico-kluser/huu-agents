@@ -166,6 +166,7 @@ export const executeDAG = async (
   emitter?: EventEmitter,
   completedNodeIds?: ReadonlySet<string>,
   maxConcurrency: number = 4,
+  profileSeats?: number,
 ): Promise<ExecutionResult> => {
   const nodeMap = new Map(dag.nodes.map((n): [string, DAGNode] => [n.id, n]));
   const completed = new Set<string>(completedNodeIds);
@@ -238,10 +239,13 @@ export const executeDAG = async (
   for (const wave of waves) {
     const executable = wave.filter(id => !blocked.has(id) && !completed.has(id));
     if (executable.length === 0) continue;
+    const seatLimit = profileSeats === undefined
+      ? maxConcurrency
+      : Math.min(maxConcurrency, Math.max(1, profileSeats));
 
     const settled = await runWithConcurrency(
       executable.map(nodeId => () => executeNode(nodeId)),
-      maxConcurrency,
+      seatLimit,
     );
 
     for (let i = 0; i < executable.length; i++) {

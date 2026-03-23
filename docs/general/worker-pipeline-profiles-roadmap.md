@@ -222,13 +222,16 @@ Teremos dois catálogos com o mesmo schema:
   "profiles": [
     {
       "id": "test-driven-fixer",
-      "name": "Test Driven Fixer",
       "description": "Gera testes, tenta corrigir, valida e reformula task se necessario.",
       "scope": "project",
       "workerModel": "anthropic/claude-sonnet-4.6",
       "langchainModel": "openai/gpt-5-mini",
       "entryStepId": "write-tests",
       "maxStepExecutions": 20,
+      "seats": 1,
+      "initialVariables": {
+        "custom_tries": 0
+      },
       "steps": []
     }
   ]
@@ -252,12 +255,16 @@ Teremos dois catálogos com o mesmo schema:
 ```json
 {
   "id": "test-driven-fixer",
-  "name": "Test Driven Fixer",
+  "description": "Gera testes, tenta corrigir, valida e reformula task se necessario.",
   "scope": "project",
   "workerModel": "anthropic/claude-sonnet-4.6",
   "langchainModel": "openai/gpt-5-mini",
   "entryStepId": "init-tries",
   "maxStepExecutions": 20,
+  "seats": 1,
+  "initialVariables": {
+    "custom_tries": 0
+  },
   "steps": [
     {
       "id": "init-tries",

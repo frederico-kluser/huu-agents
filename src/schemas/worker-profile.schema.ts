@@ -42,6 +42,10 @@ export const VariableNameSchema = z.string().min(1).refine(
 );
 export type VariableName = z.infer<typeof VariableNameSchema>;
 
+/** Valores permitidos para inicialização de variáveis custom */
+export const InitialVariableValueSchema = z.union([z.string(), z.number()]);
+export type InitialVariableValue = z.infer<typeof InitialVariableValueSchema>;
+
 // ── Step type discriminated union ───────────────────────────────────
 
 const BaseStep = z.object({
@@ -144,13 +148,17 @@ export type ProfileScope = z.infer<typeof ProfileScope>;
 
 /**
  * Perfil de worker reutilizável: define uma pipeline declarativa multi-step.
- * superRefine valida integridade referencial de entryStepId e set_variable.
+ * superRefine valida:
+ * - integridade de entryStepId
+ * - unicidade de IDs de step
+ * - regra XOR de set_variable (value ou valueExpression)
  *
  * @example
  * const profile: WorkerProfile = {
- *   id: 'test-driven-fixer', name: 'Test Driven Fixer',
+ *   id: 'test-driven-fixer',
  *   description: 'Gera testes, corrige, valida.', scope: 'project',
- *   entryStepId: 'init', maxStepExecutions: 20,
+ *   entryStepId: 'init', maxStepExecutions: 20, seats: 1,
+ *   initialVariables: { custom_tries: 0 },
  *   steps: [
  *     { id: 'init', type: 'set_variable', target: 'custom_tries', value: 0, next: 'done' },
  *     { id: 'done', type: 'goto', target: '__end__' },
@@ -158,9 +166,11 @@ export type ProfileScope = z.infer<typeof ProfileScope>;
  * };
  */
 export const WorkerProfileSchema = z.object({
-  id: z.string().min(1).regex(/^[a-z0-9-]+$/, 'ID deve usar kebab-case')
+  id: z.string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'ID deve usar kebab-case (ex: test-driven-fixer)')
     .describe('Identificador único do perfil'),
-  name: z.string().min(1).describe('Nome legível do perfil'),
   description: z.string().default('').describe('Descrição opcional'),
   scope: ProfileScope.describe('Escopo do perfil'),
   workerModel: z.string().min(1).optional()
@@ -169,9 +179,36 @@ export const WorkerProfileSchema = z.object({
     .describe('Modelo para steps langchain_prompt'),
   entryStepId: z.string().min(1).describe('ID do step inicial'),
   maxStepExecutions: z.number().int().min(1).max(100).default(20)
-    .describe('Limite de execuções para proteção contra loops'),
+    .describe('Max step executions (loop guard) por execução de pipeline'),
+  seats: z.number().int().min(1).max(16).default(1)
+    .describe('Máximo de workers desse perfil em paralelo por wave do DAG'),
+  initialVariables: z.record(VariableNameSchema, InitialVariableValueSchema).default({})
+    .describe('Valores iniciais para variáveis do runtime'),
   steps: z.array(WorkerStepSchema).min(1).describe('Steps da pipeline'),
-}).superRefine((data, ctx) => {
+}).strip().superRefine((data, ctx) => {
+  // Valida IDs duplicados de step
+  const duplicateIds = findDuplicates(data.steps.map((s) => s.id));
+  if (duplicateIds.length > 0) {
+    for (const duplicateId of duplicateIds) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate step ID "${duplicateId}"`,
+        path: ['steps'],
+      });
+    }
+  }
+
+  // Valida que initialVariables usam namespace custom_*
+  for (const variableName of Object.keys(data.initialVariables)) {
+    if (!variableName.startsWith(CUSTOM_VAR_PREFIX)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `initialVariables only supports ${CUSTOM_VAR_PREFIX}* keys`,
+        path: ['initialVariables', variableName],
+      });
+    }
+  }
+
   // Valida que entryStepId aponta para step existente
   const stepIds = new Set(data.steps.map((s) => s.id));
   if (!stepIds.has(data.entryStepId)) {
@@ -191,6 +228,13 @@ export const WorkerProfileSchema = z.object({
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `Step "${step.id}": set_variable requires "value" or "valueExpression"`,
+          path: ['steps'],
+        });
+      }
+      if (hasValue && hasExpr) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Step "${step.id}": set_variable cannot define both "value" and "valueExpression"`,
           path: ['steps'],
         });
       }
@@ -276,4 +320,17 @@ export function validateProfileReferences(profile: WorkerProfile): readonly stri
  */
 export function findStep(profile: WorkerProfile, stepId: string): WorkerStep | undefined {
   return profile.steps.find((s) => s.id === stepId);
+}
+
+function findDuplicates(values: readonly string[]): readonly string[] {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) {
+      duplicates.add(value);
+      continue;
+    }
+    seen.add(value);
+  }
+  return [...duplicates];
 }

@@ -85,14 +85,14 @@ export const OptionsScreen = ({
     // Validar referencias antes de salvar
     const errors = validateProfileReferences(profile);
     if (errors.length > 0) {
-      setSaveMessage(`Erro: ${errors[0]}`);
+      setSaveMessage(`Erro: ${errors.join(' | ')}`);
       setPhase('menu');
       return;
     }
 
     const result = await saveProfile(profile, profile.scope, projectRoot);
     if (result.ok) {
-      setSaveMessage(`Perfil "${profile.name}" salvo com sucesso`);
+      setSaveMessage(`Perfil "${profile.id}" salvo com sucesso`);
     } else {
       setSaveMessage(`Erro ao salvar: ${result.error.kind}`);
     }

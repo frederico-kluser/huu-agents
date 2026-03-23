@@ -10,6 +10,7 @@
  */
 
 import { z } from 'zod';
+import type { InitialVariableValue } from './worker-profile.schema.js';
 
 // ── Step trace entry ──────────────────────────────────────────────
 
@@ -85,13 +86,18 @@ export type WorkerPipelineState = z.infer<typeof WorkerPipelineStateSchema>;
  *
  * @param entryStepId - ID do step inicial (do perfil)
  * @param task - Descrição da tarefa do DAG node
+ * @param initialVariables - Valores iniciais para variáveis custom_*
  * @returns Estado inicial limpo
  */
-export function createInitialState(entryStepId: string, task: string): WorkerPipelineState {
+export function createInitialState(
+  entryStepId: string,
+  task: string,
+  initialVariables: Readonly<Record<string, InitialVariableValue>>,
+): WorkerPipelineState {
   return {
     currentStepId: entryStepId,
     reservedVars: { task, diff: '', error: '' },
-    customVars: {},
+    customVars: { ...initialVariables },
     trace: [],
     stepExecutionCount: 0,
     status: 'running',

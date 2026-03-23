@@ -143,21 +143,32 @@ Perfis de worker definem pipelines declarativas multi-step que substituem a exec
 3. Se perfil selecionado: orchestrator usa `runWorkerPipeline()` em vez de `runWorker()`
 4. Se "No profile": comportamento original 100% preservado
 
+**Schema do perfil:**
+- `id` em kebab-case e usado como identificador/label principal (campo `name` nao e obrigatorio)
+- `seats` (1-16) limita quantos workers com esse perfil executam em paralelo por wave do DAG
+- `initialVariables` inicializa variaveis `custom_*` no runtime antes do primeiro step
+
 **Validacao:**
 - Zod `superRefine`: entryStepId existe nos steps, set_variable tem value XOR valueExpression
+- IDs de step duplicados sao rejeitados no parse
 - `validateProfileReferences()`: verifica integridade referencial de todos os targets
 - `VariableNameSchema`: nomes devem ser reservados ou comecar com `custom_`
+- `initialVariables` aceita apenas chaves `custom_*`
 
 **Exemplo de perfil (test-driven-fixer):**
 ```json
 {
   "id": "test-driven-fixer",
-  "name": "Test Driven Fixer",
+  "description": "Gera testes, corrige e valida iterativamente.",
   "scope": "project",
   "entryStepId": "init-tries",
   "maxStepExecutions": 20,
+  "seats": 2,
+  "initialVariables": {
+    "custom_tries": 0
+  },
   "steps": [
-    { "id": "init-tries", "type": "set_variable", "target": "custom_tries", "value": 0, "next": "write-tests" },
+    { "id": "init-tries", "type": "set_variable", "target": "custom_tries", "valueExpression": "$custom_tries + 1", "next": "write-tests" },
     { "id": "write-tests", "type": "pi_agent", "taskTemplate": "Write tests for: $task", "next": "run-fix" },
     { "id": "run-fix", "type": "pi_agent", "taskTemplate": "Fix code to pass tests: $task", "next": "check" },
     { "id": "check", "type": "condition", "expression": "$custom_tries >= 3", "whenTrue": "done", "whenFalse": "increment" },

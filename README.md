@@ -167,17 +167,28 @@ Perfis de worker definem pipelines declarativas multi-step que substituem a exec
 }
 ```
 
+### Opcoes [o]
+
+Atalho `[o]` abre a tela de opcoes de qualquer tela (exceto config inicial, loading e execucao). A legenda `[o] opcoes` aparece no rodape de cada tela junto com as demais keybindings.
+
+A tela de opcoes permite:
+- **Modelo Planner** — selecao individual do catalogo completo de 18 modelos
+- **Modelo Worker** — selecao individual do catalogo completo de 18 modelos
+- **Criar Pipeline Profile** — wizard visual para montar perfis multi-step
+
+Ao trocar modelo, a mudanca e salva imediatamente e o usuario permanece na tela de opcoes — pode trocar um ou ambos sem sair. Ao criar perfil, o wizard valida referencias antes de salvar.
+
 ### Selecao de modelos
 
-StatusBar sempre visivel mostra modelos atuais. Atalho `[m]` abre selecao a qualquer momento sem perder estado.
+StatusBar sempre visivel no topo mostra modelos atuais (informacional, sem botao).
 
 ```
 +---------------------------------------------------------------------------+
-| Planner: Gemini 3.1 Pro ($2/$12)  |  Worker: MiMo-V2-Flash ($0.1/$0.3)  |  [m] modelos |
+| Planner: Gemini 3.1 Pro ($2/$12)  |  Worker: MiMo-V2-Flash ($0.1/$0.3)  |
 +---------------------------------------------------------------------------+
 ```
 
-18 modelos de 10 providers com filtro, velocidade, preco e benchmarks:
+18 modelos de 10 providers disponiveis via `[o] opcoes`, com filtro, velocidade, preco e benchmarks:
 
 | Tier | Modelos | Range preco (in/out) |
 |------|---------|---------------------|
@@ -185,13 +196,15 @@ StatusBar sempre visivel mostra modelos atuais. Atalho `[m]` abre selecao a qual
 | Both | MiniMax M2.5, Sonnet 4.6, Haiku 4.5, Kimi K2.5, DeepSeek V3.2 | $0.15-$3.00 / $0.42-$15 |
 | Worker | MiMo-V2, Step 3.5, Devstral S2, Gemini Flash, Grok, Qwen3 + 3 mais | $0.10-$0.50 / $0.30-$3.00 |
 
+Qualquer modelo pode ser usado como planner ou worker — a divisao por tier e apenas sugestao.
+
 ## Estrutura do projeto
 
 ```
 src/
 ├── cli.tsx                          # Entry point
 ├── cli-args.ts                      # Parser de argumentos CLI
-├── app.tsx                          # Router de telas + StatusBar + [m]
+├── app.tsx                          # Router de telas + StatusBar + [o] opcoes
 ├── data/
 │   └── models.ts                    # Catalogo de 18 modelos (preco, bench, speed)
 ├── schemas/
@@ -202,18 +215,19 @@ src/
 │   ├── worker-pipeline-state.schema.ts  # Estado efemero de runtime do pipeline
 │   └── errors.ts                    # Mensagens de erro de config
 ├── screens/
-│   ├── config-screen.tsx            # Config API key + selecao via ModelTable
+│   ├── config-screen.tsx            # Config API key + selecao de modelos (setup inicial)
 │   ├── context-screen.tsx           # Selecao de arquivos/dirs
 │   ├── task-screen.tsx              # Input da macro-task
+│   ├── options-screen.tsx           # [o] Opcoes: modelos individuais + criar pipelines
 │   ├── profile-select-screen.tsx    # Selecao de perfil antes da execucao
-│   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis
+│   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis (via opcoes)
 │   ├── dag-view-screen.tsx          # Visualizacao do DAG
 │   ├── execution-screen.tsx         # Dashboard de execucao real-time
 │   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
 │   └── diff-screen.tsx              # Diff completo da branch
 ├── components/
-│   ├── model-table.tsx              # Tabela filtravel de modelos
-│   ├── status-bar.tsx               # Barra de modelos atuais
+│   ├── model-table.tsx              # Tabela filtravel de 18 modelos
+│   ├── status-bar.tsx               # Barra informacional de modelos atuais
 │   ├── pipeline-trace.tsx           # Trace step-by-step de execucao de pipeline
 │   ├── dag-node-row.tsx             # Linha de no do DAG
 │   ├── tree-node.tsx                # No da arvore de arquivos
@@ -257,7 +271,7 @@ src/
     └── path-guard.ts                # Protecao contra path traversal
 ```
 
-54 arquivos, ~6.800 LOC (media ~126 LOC/arquivo).
+55 arquivos, ~7.000 LOC (media ~127 LOC/arquivo).
 
 ## Padroes de codigo
 

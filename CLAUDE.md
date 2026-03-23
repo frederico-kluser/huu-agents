@@ -33,19 +33,20 @@ src/
 │   ├── worker-profile.schema.ts     # Perfis de pipeline: steps, validação, catálogo
 │   ├── worker-pipeline-state.schema.ts  # Estado efêmero de runtime do pipeline
 │   └── errors.ts                    # Mensagens de erro de config
-├── screens/                         # 9 telas Ink
-│   ├── config-screen.tsx            # API key + seleção de modelos
+├── screens/                         # 10 telas Ink
+│   ├── config-screen.tsx            # API key + seleção de modelos (setup inicial)
 │   ├── context-screen.tsx           # Seleção de arquivos/dirs
 │   ├── task-screen.tsx              # Input da macro-task
+│   ├── options-screen.tsx           # [o] Opcoes: modelos individuais + criar pipelines
 │   ├── profile-select-screen.tsx    # Seleção de perfil antes da execução
-│   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis
+│   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis (via opcoes)
 │   ├── dag-view-screen.tsx          # Visualização do DAG
 │   ├── execution-screen.tsx         # Dashboard de execução real-time
 │   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
 │   └── diff-screen.tsx              # Diff completo da branch
 ├── components/                      # 6 componentes
-│   ├── model-table.tsx              # Tabela filtrável de modelos
-│   ├── status-bar.tsx               # Barra de modelos atuais
+│   ├── model-table.tsx              # Tabela filtrável de 18 modelos
+│   ├── status-bar.tsx               # Barra informacional de modelos atuais
 │   ├── pipeline-trace.tsx           # Trace step-by-step de pipeline
 │   ├── dag-node-row.tsx, tree-node.tsx, worker-log.tsx
 ├── prompts/                         # Planner, Explorer, Worker (adaptados por provider)
@@ -70,7 +71,7 @@ src/
 └── utils/                           # file-tree, path-guard
 ```
 
-54 arquivos, ~6.800 LOC (~126 LOC/arquivo).
+55 arquivos, ~7.000 LOC (~127 LOC/arquivo).
 
 ## Worker Pipeline Profiles
 
@@ -83,6 +84,8 @@ Perfis definem pipelines multi-step dentro de cada worker. O DAG permanece como 
 **Catálogo dual:** global (`~/.pi-dag-cli/worker-profiles.json`) + local (`.pi-dag/worker-profiles.json`). Local tem precedência.
 
 **Fluxo:** task → profile-select → executing. Sem perfil = comportamento original preservado.
+
+**Atalho [o] opcoes:** acessível de qualquer tela (exceto config/loading/executing). Permite trocar modelo planner ou worker individualmente (catálogo completo de 18 modelos) e criar pipeline profiles. Legenda `[o] opcoes` aparece no rodapé de cada tela.
 
 **Validação:** Zod `superRefine` (entryStepId, set_variable XOR) + `validateProfileReferences()` (integridade referencial de targets)
 

@@ -1,8 +1,10 @@
-# Pi DAG Task CLI (POC)
+# Pi DAG Task CLI
 
 **Pi DAG Task CLI** decompoe macro-tarefas de engenharia de software em um Grafo Direcionado Aciclico (DAG), executa agentes de IA em paralelo — cada um isolado em seu proprio Git Worktree — e mergeia os resultados automaticamente.
 
-Combina a filosofia YOLO minimalista do [Pi Coding Agent](https://github.com/badlogic/pi-mono), orquestração via LangChain.js, e padrões de engenharia de contexto e prompting para produção.
+Workers podem operar em modo **one-shot** (execucao direta) ou **multi-step** via **Worker Pipeline Profiles** — pipelines declarativas reutilizaveis com 7 tipos de step, variaveis compartilhadas, branching condicional e observabilidade step-by-step.
+
+Combina a filosofia YOLO minimalista do [Pi Coding Agent](https://github.com/badlogic/pi-mono), orquestracao via LangChain.js, e padroes de engenharia de contexto e prompting para producao.
 
 ## Como rodar
 
@@ -58,60 +60,126 @@ pi-dag -t "Corrigir bug #42" -c src/handlers --planner openai/gpt-5.4
 
 ## Stack
 
-| Camada | Tecnologia | Versão |
+| Camada | Tecnologia | Versao |
 |--------|-----------|--------|
 | Runtime | Node.js (ESM) | >= 20 |
 | Linguagem | TypeScript (strict) | ES2022, NodeNext |
 | UI Terminal | Ink + React | v6 + React 19 |
-| Schemas | Zod | validação de DAG, config, resultados |
-| Orquestração | LangChain.js | v1.0+ |
+| Schemas | Zod | validacao de DAG, config, profiles, resultados |
+| Orquestracao | LangChain.js | v1.0+ |
 | Agentes Worker | Pi Coding Agent SDK | v0.60.0+ |
-| Multi-provider LLM | OpenRouter | 18 modelos configuráveis |
+| Multi-provider LLM | OpenRouter | 18 modelos configuraveis |
 | Isolamento | Git Worktrees | nativo |
 
 ## Arquitetura
 
-Dois tiers de modelos independentes, ambos selecionáveis pelo usuário via tabela filtrável com 18 modelos (preço, velocidade, SWE-Bench, perf/cost ratio):
+Dois tiers de modelos independentes, ambos selecionaveis pelo usuario via tabela filtravel com 18 modelos (preco, velocidade, SWE-Bench, perf/cost ratio):
 
-1. **Planner (Arquiteto):** Modelo de raciocínio pesado para task decomposition. Produz DAG Zod-validado. Usa sub-agente ReAct Explorer quando precisa de contexto adicional.
-2. **Workers (Operários):** Modelos rápidos que executam subtasks em worktrees isoladas. System prompts adaptados por provider (XML Claude, Markdown GPT). Auto-commit + merge automático.
+1. **Planner (Arquiteto):** Modelo de raciocinio pesado para task decomposition. Produz DAG Zod-validado. Usa sub-agente ReAct Explorer quando precisa de contexto adicional.
+2. **Workers (Operarios):** Modelos rapidos que executam subtasks em worktrees isoladas. System prompts adaptados por provider (XML Claude, Markdown GPT). Auto-commit + merge automatico.
 
 ### Pipeline integrado
 
 ```
-Usuário → Ink TUI (config → contexto → macro-task)
-                          ↓
+Usuario -> Ink TUI (config -> contexto -> macro-task)
+                          |
               Planner (LangChain + structured output)
-              ├── ReAct Explorer (se contexto insuficiente)
-              └── DAG JSON (Zod-validated)
-                          ↓
+              |-- ReAct Explorer (se contexto insuficiente)
+              '-- DAG JSON (Zod-validated)
+                          |
               DAG Executor (topological sort por waves)
-              ├── Wave 1: nodes sem dependências → paralelo
-              ├── Wave 2: merge → liberar dependentes → paralelo
-              └── Wave N: até todos done/failed/blocked
-                          ↓
-              Worker Runner (Pi SDK por worktree)
-              ├── System prompt contextualizado (4 camadas)
-              ├── Auto-commit após conclusão
-              ├── Retry com temperature decay + model fallback
-              └── Merge na branch base
-                          ↓
-              Result Screen (resumo + retry falhados + diff)
+              |-- Wave 1: nodes sem dependencias -> paralelo
+              |-- Wave 2: merge -> liberar dependentes -> paralelo
+              '-- Wave N: ate todos done/failed/blocked
+                          |
+              Worker Execution (por node, em worktree isolada)
+              |-- [Sem perfil] Worker Runner direto (Pi SDK)
+              |   |-- System prompt contextualizado (4 camadas)
+              |   |-- Retry com temperature decay + model fallback
+              |   '-- Auto-commit apos conclusao
+              |
+              '-- [Com perfil] Worker Pipeline Runtime (multi-step)
+                  |-- Loop de steps declarativos
+                  |-- 7 step types: pi_agent, langchain_prompt,
+                  |   condition, goto, set_variable, git_diff, fail
+                  |-- Variaveis: $task, $diff, $error + $custom_*
+                  |-- Trace por step (duracao, outcome, erro)
+                  '-- Loop guard via maxStepExecutions
+                          |
+              Merge na branch base
+                          |
+              Result Screen (resumo + retry + pipeline trace)
 ```
 
-### Seleção de modelos
+### Worker Pipeline Profiles
 
-StatusBar sempre visível mostra modelos atuais. Atalho `[m]` abre seleção a qualquer momento sem perder estado.
+Perfis de worker definem pipelines declarativas multi-step que substituem a execucao one-shot dentro de cada node do DAG. O DAG continua como scheduler de alto nivel — a novidade esta dentro de cada worker.
+
+**Step types disponiveis (V1):**
+
+| Step | Funcao |
+|------|--------|
+| `pi_agent` | Executa Pi Coding Agent no worktree com task template |
+| `langchain_prompt` | Gera/refina texto via LLM (ChatOpenAI + OpenRouter) |
+| `condition` | Avalia expressao ($var == value) e bifurca execucao |
+| `goto` | Salto incondicional para outro step ou `__end__` |
+| `set_variable` | Define variavel (literal ou expressao aritmetica) |
+| `git_diff` | Captura diff do worktree e armazena em variavel |
+| `fail` | Encerra pipeline com erro de negocio explicito |
+
+**Variaveis:**
+- Reservadas: `$task` (descricao), `$diff` (worktree diff), `$error` (ultimo erro)
+- Custom: `$custom_*` (namespace do usuario, ex: `$custom_tries`)
+- Resolucao graciosa: variavel nao encontrada permanece como `$var` no template
+
+**Catalogo dual:**
+- Global: `~/.pi-dag-cli/worker-profiles.json`
+- Local (projeto): `.pi-dag/worker-profiles.json`
+- Merge automatico: local vence em colisao de ID
+
+**Fluxo de selecao:**
+1. Usuario submete task
+2. Tela de selecao de perfil: lista perfis disponiveis + "No profile"
+3. Se perfil selecionado: orchestrator usa `runWorkerPipeline()` em vez de `runWorker()`
+4. Se "No profile": comportamento original 100% preservado
+
+**Validacao:**
+- Zod `superRefine`: entryStepId existe nos steps, set_variable tem value XOR valueExpression
+- `validateProfileReferences()`: verifica integridade referencial de todos os targets
+- `VariableNameSchema`: nomes devem ser reservados ou comecar com `custom_`
+
+**Exemplo de perfil (test-driven-fixer):**
+```json
+{
+  "id": "test-driven-fixer",
+  "name": "Test Driven Fixer",
+  "scope": "project",
+  "entryStepId": "init-tries",
+  "maxStepExecutions": 20,
+  "steps": [
+    { "id": "init-tries", "type": "set_variable", "target": "custom_tries", "value": 0, "next": "write-tests" },
+    { "id": "write-tests", "type": "pi_agent", "taskTemplate": "Write tests for: $task", "next": "run-fix" },
+    { "id": "run-fix", "type": "pi_agent", "taskTemplate": "Fix code to pass tests: $task", "next": "check" },
+    { "id": "check", "type": "condition", "expression": "$custom_tries >= 3", "whenTrue": "done", "whenFalse": "increment" },
+    { "id": "increment", "type": "set_variable", "target": "custom_tries", "valueExpression": "$custom_tries + 1", "next": "write-tests" },
+    { "id": "done", "type": "goto", "target": "__end__" }
+  ]
+}
+```
+
+### Selecao de modelos
+
+StatusBar sempre visivel mostra modelos atuais. Atalho `[m]` abre selecao a qualquer momento sem perder estado.
 
 ```
-┌───────────────────────────────────────────────────────────────────────┐
-│ Planner: Gemini 3.1 Pro ($2/$12)  |  Worker: MiMo-V2-Flash ($0.1/$0.3)  |  [m] modelos │
-└───────────────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------------------+
+| Planner: Gemini 3.1 Pro ($2/$12)  |  Worker: MiMo-V2-Flash ($0.1/$0.3)  |  [m] modelos |
++---------------------------------------------------------------------------+
 ```
 
-18 modelos de 10 providers com filtro, velocidade, preço e benchmarks:
+18 modelos de 10 providers com filtro, velocidade, preco e benchmarks:
 
-| Tier | Modelos | Range preço (in/out) |
+| Tier | Modelos | Range preco (in/out) |
 |------|---------|---------------------|
 | Planner | Opus 4.6, GPT-5.4, Gemini 3.1 Pro, Codex 5.3 | $1.75-$5.00 / $12-$25 |
 | Both | MiniMax M2.5, Sonnet 4.6, Haiku 4.5, Kimi K2.5, DeepSeek V3.2 | $0.15-$3.00 / $0.42-$15 |
@@ -122,25 +190,33 @@ StatusBar sempre visível mostra modelos atuais. Atalho `[m]` abre seleção a q
 ```
 src/
 ├── cli.tsx                          # Entry point
+├── cli-args.ts                      # Parser de argumentos CLI
 ├── app.tsx                          # Router de telas + StatusBar + [m]
 ├── data/
-│   └── models.ts                    # Catálogo de 18 modelos (preço, bench, speed)
+│   └── models.ts                    # Catalogo de 18 modelos (preco, bench, speed)
 ├── schemas/
 │   ├── dag.schema.ts                # DAG output do Planner (Zod)
 │   ├── config.schema.ts             # ~/.pi-dag-cli.json (Zod, selectedAgents + legado)
-│   └── worker-result.schema.ts      # Resultado de cada Worker (Zod)
+│   ├── worker-result.schema.ts      # Resultado de cada Worker (+ pipelineTrace, failureReason)
+│   ├── worker-profile.schema.ts     # Perfis de pipeline: steps, validacao, catalogo
+│   ├── worker-pipeline-state.schema.ts  # Estado efemero de runtime do pipeline
+│   └── errors.ts                    # Mensagens de erro de config
 ├── screens/
-│   ├── config-screen.tsx            # Config API key + seleção via ModelTable
-│   ├── context-screen.tsx           # Seleção de arquivos/dirs
+│   ├── config-screen.tsx            # Config API key + selecao via ModelTable
+│   ├── context-screen.tsx           # Selecao de arquivos/dirs
 │   ├── task-screen.tsx              # Input da macro-task
-│   ├── dag-view-screen.tsx          # Visualização do DAG
-│   ├── execution-screen.tsx         # Dashboard de execução real-time
-│   └── result-screen.tsx            # Resultado final + retry
+│   ├── profile-select-screen.tsx    # Selecao de perfil antes da execucao
+│   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis
+│   ├── dag-view-screen.tsx          # Visualizacao do DAG
+│   ├── execution-screen.tsx         # Dashboard de execucao real-time
+│   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
+│   └── diff-screen.tsx              # Diff completo da branch
 ├── components/
-│   ├── model-table.tsx              # Tabela filtrável de modelos
+│   ├── model-table.tsx              # Tabela filtravel de modelos
 │   ├── status-bar.tsx               # Barra de modelos atuais
-│   ├── dag-node-row.tsx             # Linha de nó do DAG
-│   ├── tree-node.tsx                # Nó da árvore de arquivos
+│   ├── pipeline-trace.tsx           # Trace step-by-step de execucao de pipeline
+│   ├── dag-node-row.tsx             # Linha de no do DAG
+│   ├── tree-node.tsx                # No da arvore de arquivos
 │   └── worker-log.tsx               # Log streaming por worker
 ├── prompts/
 │   ├── planner.ts                   # System prompt do Planner
@@ -151,44 +227,56 @@ src/
 │   ├── explorer-tools.ts            # Tools read-only do Explorer
 │   └── worker-runner.ts             # Runner do Pi Agent SDK
 ├── pipeline/
-│   ├── orchestrator.ts              # Pipeline end-to-end
+│   ├── orchestrator.ts              # Pipeline end-to-end (planner -> DAG -> workers)
 │   ├── planner.pipeline.ts          # Planner + Explorer + Zod validation
-│   ├── dag-executor.ts              # Executor topológico + paralelismo
-│   └── retry-handler.ts             # Retry com temperature decay
+│   ├── dag-executor.ts              # Executor topologico + paralelismo por waves
+│   ├── retry-handler.ts             # Retry com temperature decay + model fallback
+│   ├── worker-pipeline-runtime.ts   # Runtime multi-step para perfis de worker
+│   ├── variable-resolver.ts         # Resolucao de $vars em templates (funcoes puras)
+│   └── step-handlers/               # 7 handlers de step V1
+│       ├── types.ts                 # StepHandler, StepHandlerContext, StepHandlerResult
+│       ├── index.ts                 # ReadonlyMap registry de handlers
+│       ├── ai-handlers.ts           # pi_agent (Pi SDK), langchain_prompt (ChatOpenAI)
+│       ├── control-handlers.ts      # condition, goto, set_variable, fail
+│       └── git-diff-handler.ts      # git_diff (captura diff do worktree)
+├── services/
+│   └── profile-catalog.ts           # Persistencia de perfis (global + local, Result<T>)
 ├── git/
 │   ├── git-types.ts                 # Tipos Result, GitError, CommitHash
-│   ├── git-wrapper.ts               # Operações Git atômicas (execFile)
+│   ├── git-wrapper.ts               # Operacoes Git atomicas (execFile)
 │   ├── worktree-manager.ts          # Lifecycle de worktrees
-│   ├── conflict-resolver.ts         # Resolução de conflitos
+│   ├── conflict-resolver.ts         # Resolucao de conflitos
 │   └── index.ts                     # Re-exports
 ├── hooks/
-│   ├── use-config.ts                # Persistência de config
+│   ├── use-config.ts                # Persistencia de config
 │   ├── use-file-tree.ts             # Listagem de arquivos
-│   ├── use-api-validation.ts        # Validação de API key
-│   └── use-elapsed-time.ts          # Timer de execução
+│   ├── use-api-validation.ts        # Validacao de API key
+│   └── use-elapsed-time.ts          # Timer de execucao
 └── utils/
-    ├── file-tree.ts                 # Árvore de arquivos (git ls-files)
-    └── path-guard.ts                # Proteção contra path traversal
+    ├── file-tree.ts                 # Arvore de arquivos (git ls-files)
+    └── path-guard.ts                # Protecao contra path traversal
 ```
 
-38 arquivos, ~4.800 LOC (média ~126 LOC/arquivo).
+54 arquivos, ~6.800 LOC (media ~126 LOC/arquivo).
 
-## Padrões de código
+## Padroes de codigo
 
 Segue `docs/general/file-agent-patterns.md`:
 
-| Métrica | Alvo | Limite |
+| Metrica | Alvo | Limite |
 |---------|------|--------|
 | Linhas por arquivo | 200-300 | 500 |
-| Funções por arquivo | 5-10 | 15 |
-| Linhas por função | 20-30 | 50 |
-| Complexidade ciclomática | <= 7 | 10 |
+| Funcoes por arquivo | 5-10 | 15 |
+| Linhas por funcao | 20-30 | 50 |
+| Complexidade ciclomatica | <= 7 | 10 |
 
 TypeScript strict, sem `any`, TSDoc com `@throws` e `@example`, imutabilidade, Zod em toda boundary.
 
+**Error handling:** `Result<T>` pattern com error discrimination para flow control (sem throw/catch). `PipelineFailError` distingue falhas de negocio de erros tecnicos no runtime de pipeline.
+
 ## Por que Git Worktrees?
 
-Agentes rodando em paralelo na mesma working tree enfrentam race conditions de I/O e lock do index Git. Worktrees são containers temporários baratos, isolados no filesystem, com merge trivial e limpeza segura.
+Agentes rodando em paralelo na mesma working tree enfrentam race conditions de I/O e lock do index Git. Worktrees sao containers temporarios baratos, isolados no filesystem, com merge trivial e limpeza segura.
 
 ## Configuracao
 
@@ -202,6 +290,17 @@ A configuracao e persistida em `~/.pi-dag-cli.json` e inclui:
 | `worktreeBasePath` | string | `.pi-dag-worktrees` | Diretorio base para worktrees |
 
 `maxConcurrency` limita quantos workers executam simultaneamente dentro de cada wave. Valores baixos (1-2) reduzem carga no sistema e uso de API; valores altos (8-16) maximizam paralelismo em DAGs grandes.
+
+### Perfis de worker
+
+Perfis sao persistidos separadamente em catalogos JSON:
+
+| Catalogo | Caminho | Precedencia |
+|----------|---------|-------------|
+| Global | `~/.pi-dag-cli/worker-profiles.json` | Menor |
+| Local | `.pi-dag/worker-profiles.json` | Maior (vence colisao de ID) |
+
+Selecao de perfil e efemera por execucao — nao persiste na config.
 
 ## Pre-requisitos
 

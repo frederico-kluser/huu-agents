@@ -156,6 +156,7 @@ export const ResultScreen = ({
       <Box marginTop={1} gap={2}>
         {retryableCount > 0 && <Text dimColor>[r] retry falhados/bloqueados</Text>}
         <Text dimColor>[d] ver diff</Text>
+        <Text dimColor>[o] opcoes</Text>
         <Text dimColor>[q] sair</Text>
       </Box>
     </Box>

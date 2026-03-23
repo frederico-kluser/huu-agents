@@ -4,7 +4,6 @@ import { findModel, formatPrice } from '../data/models.js';
 interface StatusBarProps {
   readonly plannerModel: string;
   readonly workerModel: string;
-  readonly onChangeModels?: () => void;
 }
 
 /** Formata resumo compacto de um modelo: "Nome ($in/$out)" */
@@ -20,10 +19,10 @@ const modelLabel = (id: string): string => {
  *
  * @example
  * ```tsx
- * <StatusBar plannerModel="google/gemini-3.1-pro" workerModel="xiaomi/mimo-v2-flash" onChangeModels={() => setScreen('model-change')} />
+ * <StatusBar plannerModel="google/gemini-3.1-pro" workerModel="xiaomi/mimo-v2-flash" />
  * ```
  */
-export const StatusBar = ({ plannerModel, workerModel, onChangeModels }: StatusBarProps) => (
+export const StatusBar = ({ plannerModel, workerModel }: StatusBarProps) => (
   <Box borderStyle="single" borderColor="gray" paddingX={1} gap={1} marginBottom={1}>
     <Text>
       <Text dimColor>Planner: </Text>
@@ -34,11 +33,5 @@ export const StatusBar = ({ plannerModel, workerModel, onChangeModels }: StatusB
       <Text dimColor>Worker: </Text>
       <Text bold color="cyan">{modelLabel(workerModel)}</Text>
     </Text>
-    {onChangeModels && (
-      <>
-        <Text dimColor>|</Text>
-        <Text dimColor>[m] modelos</Text>
-      </>
-    )}
   </Box>
 );

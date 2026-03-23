@@ -70,8 +70,9 @@ export const TaskScreen = ({ config, contextFiles, onSubmit, initialTask = '' }:
           </Box>
         )}
 
-        <Box marginTop={1}>
+        <Box marginTop={1} gap={2}>
           <Text dimColor>[Enter] iniciar pipeline</Text>
+          <Text dimColor>[o] opcoes</Text>
         </Box>
       </Box>
     </Box>

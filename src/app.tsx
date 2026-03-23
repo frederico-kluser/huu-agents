@@ -4,6 +4,7 @@ import { ConfigScreen } from './screens/config-screen.js';
 import { ContextScreen } from './screens/context-screen.js';
 import { TaskScreen } from './screens/task-screen.js';
 import { ProfileSelectScreen } from './screens/profile-select-screen.js';
+import { OptionsScreen } from './screens/options-screen.js';
 import { ExecutionScreen } from './screens/execution-screen.js';
 import { ResultScreen } from './screens/result-screen.js';
 import { DiffScreen } from './screens/diff-screen.js';
@@ -17,7 +18,7 @@ import type { DAG, DAGNode } from './schemas/dag.schema.js';
 import type { WorkerResult } from './schemas/worker-result.schema.js';
 import type { WorkerProfile } from './schemas/worker-profile.schema.js';
 
-type Screen = 'loading' | 'config' | 'context' | 'task' | 'profile-select' | 'executing' | 'result' | 'diff' | 'model-change';
+type Screen = 'loading' | 'config' | 'context' | 'task' | 'profile-select' | 'executing' | 'result' | 'diff' | 'options';
 
 interface PipelineResult {
   readonly dag: DAG;
@@ -89,7 +90,7 @@ const INITIAL_STATE: PipelineState = {
  * State machine: loading → config → context → task → executing → result.
  * Aceita cliArgs para pular telas e overridar modelos.
  * StatusBar visivel em todas as telas exceto loading/config.
- * [m] abre selecao de modelos sem resetar estado.
+ * [o] abre opcoes (modelos individuais + pipeline profiles) sem resetar estado.
  *
  * @param props.cliArgs - Argumentos CLI parseados (opcional)
  * @example
@@ -122,11 +123,11 @@ export const App = ({ cliArgs }: AppProps) => {
     setScreen('config');
   }
 
-  // Keybinding [m] para trocar modelos (exceto durante config/loading/executing)
+  // Keybinding [o] para opcoes (exceto durante config/loading/executing)
   useInput((input) => {
-    if (input === 'm' && pipeline.config && screen !== 'config' && screen !== 'loading' && screen !== 'executing' && screen !== 'model-change' && screen !== 'diff') {
+    if (input === 'o' && pipeline.config && screen !== 'config' && screen !== 'loading' && screen !== 'executing' && screen !== 'options' && screen !== 'diff') {
       setPipeline((prev) => ({ ...prev, previousScreen: screen }));
-      setScreen('model-change');
+      setScreen('options');
     }
   });
 
@@ -149,17 +150,17 @@ export const App = ({ cliArgs }: AppProps) => {
     setScreen(targetScreen);
   }, [saveConfig, cliArgs]);
 
-  const handleModelChange = useCallback(async (config: Config) => {
+  const handleOptionsConfigChange = useCallback(async (config: Config) => {
     const saveError = await saveConfig(config);
     if (saveError) return;
+    setPipeline((prev) => ({ ...prev, config }));
+  }, [saveConfig]);
 
-    setPipeline((prev) => ({
-      ...prev,
-      config,
-      previousScreen: null,
-    }));
-    setScreen(pipeline.previousScreen ?? 'context');
-  }, [saveConfig, pipeline.previousScreen]);
+  const handleOptionsBack = useCallback(() => {
+    const target = pipeline.previousScreen ?? 'context';
+    setPipeline((prev) => ({ ...prev, previousScreen: null }));
+    setScreen(target);
+  }, [pipeline.previousScreen]);
 
   const handleContextComplete = useCallback((selectedPaths: string[]) => {
     const hasCliTask = Boolean(cliArgs?.task);
@@ -254,10 +255,6 @@ export const App = ({ cliArgs }: AppProps) => {
     <StatusBar
       plannerModel={pipeline.config!.selectedAgents.planner}
       workerModel={pipeline.config!.selectedAgents.worker}
-      onChangeModels={screen !== 'executing' ? () => {
-        setPipeline((prev) => ({ ...prev, previousScreen: screen }));
-        setScreen('model-change');
-      } : undefined}
     />
   ) : null;
 
@@ -274,17 +271,15 @@ export const App = ({ cliArgs }: AppProps) => {
     );
   }
 
-  if (screen === 'model-change' && pipeline.config) {
-    // Usar config persistida (sem overrides CLI) para pre-preencher a tela de modelos.
-    // Evita que overrides de sessao vazem para o disco se o usuario confirmar sem alterar.
-    const persistedConfig = configState.status === 'loaded' ? configState.config : pipeline.config;
+  if (screen === 'options' && pipeline.config) {
     return (
       <Box flexDirection="column">
-        {configState.status === 'error' && <Box padding={1}><Text color="red">{getConfigErrorMessage(configState.error)}</Text></Box>}
-        <ConfigScreen
-          skipApiKey
-          existingConfig={persistedConfig}
-          onComplete={handleModelChange}
+        {statusBarEl}
+        <OptionsScreen
+          config={pipeline.config}
+          onConfigChange={handleOptionsConfigChange}
+          onBack={handleOptionsBack}
+          projectRoot={process.cwd()}
         />
       </Box>
     );

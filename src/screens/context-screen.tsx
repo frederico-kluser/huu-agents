@@ -23,7 +23,7 @@ const StatusFooter = ({ count, tokens }: { count: number; tokens: number }) => (
       </Text>
     </Box>
     <Box>
-      <Text dimColor>j/k:navegar  espaco:selecionar  enter:expandir  c:confirmar</Text>
+      <Text dimColor>j/k:navegar  espaco:selecionar  enter:expandir  c:confirmar  [o] opcoes</Text>
     </Box>
   </Box>
 );

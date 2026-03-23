@@ -133,9 +133,13 @@ export const ProfileSelectScreen = ({ projectRoot, onSelect }: ProfileSelectScre
 
       {profiles.length === 0 && (
         <Box marginTop={1}>
-          <Text dimColor>No profiles found. Create one in the config screen.</Text>
+          <Text dimColor>No profiles found. Use [o] opcoes to create one.</Text>
         </Box>
       )}
+
+      <Box marginTop={1} gap={2}>
+        <Text dimColor>j/k:navegar  Enter:selecionar  [o] opcoes</Text>
+      </Box>
     </Box>
   );
 };

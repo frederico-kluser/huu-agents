@@ -12,12 +12,14 @@ import { planTask, type PlannerResult } from './planner.pipeline.js';
 import { executeDAG, type WorkerFn } from './dag-executor.js';
 import { retryWorker, type RetryConfig } from './retry-handler.js';
 import { runWorker, type WorkerProgressEvent } from '../agents/worker-runner.js';
+import { runWorkerPipeline } from './worker-pipeline-runtime.js';
 import { generateWorkerPrompt } from '../prompts/worker.prompt.js';
 import { createBranch, execGit, getCurrentBranch } from '../git/git-wrapper.js';
 import type { MergeStrategy } from '../git/conflict-resolver.js';
 import type { Config } from '../schemas/config.schema.js';
 import type { DAG, DAGNode } from '../schemas/dag.schema.js';
 import type { WorkerResult } from '../schemas/worker-result.schema.js';
+import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
 import type { LogEntry } from '../screens/execution-screen.js';
 
 /** Estado do pipeline emitido para a UI via callback */
@@ -40,6 +42,8 @@ export interface OrchestratorConfig {
   readonly contextFiles: readonly string[];
   readonly rootPath: string;
   readonly onProgress: (progress: PipelineProgress) => void;
+  /** Active worker pipeline profile (undefined = use current one-shot behavior) */
+  readonly activeProfile?: WorkerProfile;
 }
 
 /** Configuração para retry seletivo de nodes falhados */
@@ -50,6 +54,8 @@ export interface RetryPipelineConfig {
   readonly baseBranch: string;
   readonly previousResults: readonly WorkerResult[];
   readonly onProgress: (progress: PipelineProgress) => void;
+  /** Active worker pipeline profile (undefined = use current one-shot behavior) */
+  readonly activeProfile?: WorkerProfile;
 }
 
 // --- Helpers compartilhados entre runPipeline e retryPipeline ---
@@ -99,14 +105,33 @@ async function getDiffStat(baseBranch: string, branch: string): Promise<string> 
 
 /**
  * Cria workerFn que conecta DAG Executor ao Worker Runner com retry automático.
+ * Quando um perfil está ativo, usa o pipeline runtime multi-step em vez do worker direto.
  * Extraído para compartilhar entre runPipeline e retryPipeline.
  */
 function createWorkerFn(
   config: Config,
   logs: LogEntry[],
   onEmit: () => void,
+  activeProfile?: WorkerProfile,
 ): WorkerFn {
   return async (node: DAGNode, worktreePath: string) => {
+    // Pipeline profile ativo: delegar ao runtime multi-step
+    if (activeProfile) {
+      const onProgress = (message: string) => {
+        addLog(logs, node.id, message);
+        onEmit();
+      };
+      return runWorkerPipeline({
+        profile: activeProfile,
+        task: node.task,
+        nodeId: node.id,
+        worktreePath,
+        apiKey: config.openrouterApiKey,
+        onProgress,
+      });
+    }
+
+    // Sem perfil: comportamento original preservado
     const provider = extractProvider(config.workerModel);
     const gitLog = await getGitLog(worktreePath);
     const systemPrompt = generateWorkerPrompt(node, gitLog, provider);
@@ -165,14 +190,14 @@ function createExecutionEmitter(
 
   emitter.on('node-failed', ({ nodeId, error }: { nodeId: string; error: string }) => {
     updateNodeStatus(dag, nodeId, 'failed');
-    results.push({ nodeId, status: 'failure', filesModified: [], commitHash: null, error });
+    results.push({ nodeId, status: 'failure', filesModified: [], commitHash: null, error, pipelineTrace: null, failureReason: null });
     addLog(logs, nodeId, `FALHA: ${error}`);
     onStatusChange(null);
   });
 
   emitter.on('node-blocked', ({ nodeId, blockedBy }: { nodeId: string; blockedBy: string }) => {
     updateNodeStatus(dag, nodeId, 'blocked');
-    results.push({ nodeId, status: 'blocked', filesModified: [], commitHash: null, error: `Bloqueado: dependencia '${blockedBy}' falhou` });
+    results.push({ nodeId, status: 'blocked', filesModified: [], commitHash: null, error: `Bloqueado: dependencia '${blockedBy}' falhou`, pipelineTrace: null, failureReason: null });
     addLog(logs, nodeId, `BLOQUEADO: dependencia '${blockedBy}' falhou`);
     onStatusChange(null);
   });
@@ -214,7 +239,7 @@ function buildResult(
 export async function runPipeline(
   orchestratorConfig: OrchestratorConfig,
 ): Promise<PlannerResult | PipelineProgress> {
-  const { config, macroTask, contextFiles, rootPath, onProgress } = orchestratorConfig;
+  const { config, macroTask, contextFiles, rootPath, onProgress, activeProfile } = orchestratorConfig;
   const timestamp = generateTimestamp();
   const branch = `task-${timestamp}`;
   const logs: LogEntry[] = [];
@@ -261,7 +286,7 @@ export async function runPipeline(
       activeNodeId = id;
       emit('executing');
     });
-    const workerFn = createWorkerFn(config, logs, () => emit('executing'));
+    const workerFn = createWorkerFn(config, logs, () => emit('executing'), activeProfile);
 
     await executeDAG(currentDAG, timestamp, workerFn, emitter, undefined, config.maxConcurrency);
 
@@ -292,7 +317,7 @@ export async function runPipeline(
 export async function retryPipeline(
   retryConfig: RetryPipelineConfig,
 ): Promise<PipelineProgress> {
-  const { config, dag, branch, baseBranch, previousResults, onProgress } = retryConfig;
+  const { config, dag, branch, baseBranch, previousResults, onProgress, activeProfile } = retryConfig;
   const timestamp = branch.slice('task-'.length);
 
   // Nodes com resultado success/partial são preservados e pulados
@@ -333,7 +358,7 @@ export async function retryPipeline(
       activeNodeId = id;
       emit('executing');
     });
-    const workerFn = createWorkerFn(config, logs, () => emit('executing'));
+    const workerFn = createWorkerFn(config, logs, () => emit('executing'), activeProfile);
 
     await executeDAG(currentDAG, timestamp, workerFn, emitter, completedIds, config.maxConcurrency);
 

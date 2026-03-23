@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { StepTraceEntrySchema } from './worker-pipeline-state.schema.js';
 
 /**
  * Enumeration of worker execution status outcomes.
@@ -13,6 +14,7 @@ export type WorkerStatus = z.infer<typeof WorkerStatus>;
 /**
  * Result of a worker agent's execution on a single DAG node.
  * Captures the outcome, files modified, git commit hash, and any errors.
+ * When a pipeline profile is active, also includes step-level trace data.
  *
  * @example
  * const result = {
@@ -29,7 +31,9 @@ export type WorkerStatus = z.infer<typeof WorkerStatus>;
  *   status: "failure",
  *   filesModified: [],
  *   commitHash: null,
- *   error: "TypeScript compilation failed: Type 'unknown' is not assignable to type 'string'"
+ *   error: "TypeScript compilation failed",
+ *   pipelineTrace: [{ stepId: "write-tests", type: "pi_agent", startedAt: 0, finishedAt: 1000, outcome: "ok", error: null }],
+ *   failureReason: "Step limit exceeded"
  * }
  */
 export const WorkerResultSchema = z.object({
@@ -49,6 +53,16 @@ export const WorkerResultSchema = z.object({
     .string()
     .nullable()
     .describe('Error message if execution failed, null if successful'),
+  pipelineTrace: z
+    .array(StepTraceEntrySchema)
+    .nullable()
+    .default(null)
+    .describe('Step execution trace when a pipeline profile was active, null otherwise'),
+  failureReason: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe('Structured failure reason from pipeline fail step, null if not applicable'),
 });
 
 export type WorkerResult = z.infer<typeof WorkerResultSchema>;

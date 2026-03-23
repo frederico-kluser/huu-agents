@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import { ConfigScreen } from './screens/config-screen.js';
 import { ContextScreen } from './screens/context-screen.js';
 import { TaskScreen } from './screens/task-screen.js';
+import { ProfileSelectScreen } from './screens/profile-select-screen.js';
 import { ExecutionScreen } from './screens/execution-screen.js';
 import { ResultScreen } from './screens/result-screen.js';
 import { DiffScreen } from './screens/diff-screen.js';
@@ -14,8 +15,9 @@ import type { Config } from './schemas/config.schema.js';
 import { getConfigErrorMessage } from './schemas/errors.js';
 import type { DAG, DAGNode } from './schemas/dag.schema.js';
 import type { WorkerResult } from './schemas/worker-result.schema.js';
+import type { WorkerProfile } from './schemas/worker-profile.schema.js';
 
-type Screen = 'loading' | 'config' | 'context' | 'task' | 'executing' | 'result' | 'diff' | 'model-change';
+type Screen = 'loading' | 'config' | 'context' | 'task' | 'profile-select' | 'executing' | 'result' | 'diff' | 'model-change';
 
 interface PipelineResult {
   readonly dag: DAG;
@@ -43,6 +45,7 @@ interface PipelineState {
   readonly progress: PipelineProgress | null;
   readonly previousScreen: Screen | null;
   readonly retryContext: RetryContext | null;
+  readonly activeProfile: WorkerProfile | null;
 }
 
 interface AppProps {
@@ -78,6 +81,7 @@ const resolveInitialScreen = (cliArgs?: CliArgs): Screen => {
 const INITIAL_STATE: PipelineState = {
   config: null, contextFiles: [], macroTask: '',
   startTime: 0, result: null, progress: null, previousScreen: null, retryContext: null,
+  activeProfile: null,
 };
 
 /**
@@ -168,7 +172,12 @@ export const App = ({ cliArgs }: AppProps) => {
   }, [cliArgs?.task]);
 
   const handleTaskSubmit = useCallback((task: string) => {
-    setPipeline((prev) => ({ ...prev, macroTask: task, startTime: Date.now() }));
+    setPipeline((prev) => ({ ...prev, macroTask: task }));
+    setScreen('profile-select');
+  }, []);
+
+  const handleProfileSelect = useCallback((profile: WorkerProfile | null) => {
+    setPipeline((prev) => ({ ...prev, activeProfile: profile, startTime: Date.now() }));
     setScreen('executing');
   }, []);
 
@@ -201,6 +210,7 @@ export const App = ({ cliArgs }: AppProps) => {
           baseBranch: pipeline.retryContext.baseBranch,
           previousResults: pipeline.retryContext.previousResults,
           onProgress,
+          activeProfile: pipeline.activeProfile ?? undefined,
         });
         handleResult(result);
       } else {
@@ -212,6 +222,7 @@ export const App = ({ cliArgs }: AppProps) => {
           contextFiles: pipeline.contextFiles,
           rootPath: process.cwd(),
           onProgress,
+          activeProfile: pipeline.activeProfile ?? undefined,
         });
         if (cancelled) return;
         if ('type' in result && result.type === 'clarify') { setScreen('task'); return; }
@@ -288,6 +299,15 @@ export const App = ({ cliArgs }: AppProps) => {
       <Box flexDirection="column">
         {statusBarEl}
         <TaskScreen config={pipeline.config} contextFiles={[...pipeline.contextFiles]} onSubmit={handleTaskSubmit} initialTask={pipeline.macroTask} />
+      </Box>
+    );
+  }
+
+  if (screen === 'profile-select') {
+    return (
+      <Box flexDirection="column">
+        {statusBarEl}
+        <ProfileSelectScreen projectRoot={process.cwd()} onSelect={handleProfileSelect} />
       </Box>
     );
   }

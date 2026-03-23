@@ -1,6 +1,7 @@
 import { Box, Text, useApp, useInput } from 'ink';
 import type { DAGNode } from '../schemas/dag.schema.js';
 import type { WorkerResult } from '../schemas/worker-result.schema.js';
+import { PipelineTrace } from '../components/pipeline-trace.js';
 
 interface ResultScreenProps {
   readonly nodes: readonly DAGNode[];
@@ -111,11 +112,23 @@ export const ResultScreen = ({
             const node = nodes.find((n) => n.id === nodeId);
             const result = results.find((r) => r.nodeId === nodeId);
             return (
-              <Box key={nodeId} marginTop={0}>
-                <Text color="red">{'x '}</Text>
-                <Text bold>{nodeId}</Text>
-                <Text dimColor>{' — '}{node?.task ?? 'unknown'}</Text>
-                {result?.error && <Text color="red">{'\n  '}{result.error}</Text>}
+              <Box key={nodeId} flexDirection="column" marginTop={0}>
+                <Box>
+                  <Text color="red">{'x '}</Text>
+                  <Text bold>{nodeId}</Text>
+                  <Text dimColor>{' — '}{node?.task ?? 'unknown'}</Text>
+                </Box>
+                {result?.error && (
+                  <Box marginLeft={2}><Text color="red">{result.error}</Text></Box>
+                )}
+                {result?.failureReason && result.failureReason !== result.error && (
+                  <Box marginLeft={2}><Text color="red" dimColor>Reason: {result.failureReason}</Text></Box>
+                )}
+                {result?.pipelineTrace && result.pipelineTrace.length > 0 && (
+                  <Box marginLeft={2} marginTop={0}>
+                    <PipelineTrace trace={result.pipelineTrace} maxEntries={5} />
+                  </Box>
+                )}
               </Box>
             );
           })}

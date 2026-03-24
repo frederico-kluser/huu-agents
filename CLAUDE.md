@@ -34,13 +34,14 @@ src/
 │   ├── worker-profile.schema.ts     # Perfis de pipeline: steps, validação, catálogo
 │   ├── worker-pipeline-state.schema.ts  # Estado efêmero de runtime do pipeline
 │   └── errors.ts                    # Mensagens de erro de config
-├── screens/                         # 10 telas Ink
+├── screens/                         # 11 telas Ink
 │   ├── config-screen.tsx            # API key + seleção de modelos (setup inicial)
 │   ├── context-screen.tsx           # Seleção de arquivos/dirs
 │   ├── task-screen.tsx              # Input da macro-task
 │   ├── options-screen.tsx           # [o] Opcoes: modelos individuais + criar pipelines
 │   ├── profile-select-screen.tsx    # Seleção de perfil antes da execução
 │   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis (via opcoes)
+│   ├── ai-pipeline-builder-screen.tsx # Criação de pipeline via IA (LangChain)
 │   ├── dag-view-screen.tsx          # Visualização do DAG
 │   ├── execution-screen.tsx         # Dashboard de execução real-time
 │   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
@@ -50,7 +51,8 @@ src/
 │   ├── status-bar.tsx               # Barra informacional de modelos atuais
 │   ├── pipeline-trace.tsx           # Trace step-by-step de pipeline
 │   ├── dag-node-row.tsx, tree-node.tsx, worker-log.tsx
-├── prompts/                         # Planner, Explorer, Worker (adaptados por provider)
+├── prompts/                         # Planner, Explorer, Worker, Pipeline Builder
+│   └── pipeline-builder.ts         # Prompts few-shot para AI Pipeline Builder
 ├── agents/                          # Explorer ReAct (LangChain), Worker Runner (Pi SDK)
 ├── pipeline/
 │   ├── orchestrator.ts              # Pipeline end-to-end (planner → DAG → workers)
@@ -66,13 +68,14 @@ src/
 │       ├── control-handlers.ts      # condition, goto, set_variable, fail
 │       └── git-diff-handler.ts      # git_diff (captura diff do worktree)
 ├── services/
-│   └── profile-catalog.ts           # Persistência de perfis (global + local, Result<T>)
+│   ├── profile-catalog.ts           # Persistência de perfis (global + local, Result<T>)
+│   └── ai-pipeline-generator.ts     # Geração de pipelines via LangChain (2 chamadas LLM)
 ├── git/                             # git-wrapper, worktree-manager, conflict-resolver
 ├── hooks/                           # use-config, use-file-tree, use-api-validation, use-elapsed-time, use-models
 └── utils/                           # file-tree, path-guard
 ```
 
-55 arquivos, ~7.000 LOC (~127 LOC/arquivo).
+58 arquivos, ~7.500 LOC (~129 LOC/arquivo).
 
 ## Worker Pipeline Profiles
 
@@ -88,7 +91,23 @@ Perfis definem pipelines multi-step dentro de cada worker. O DAG permanece como 
 
 **Schema do perfil:** `id` em kebab-case como label principal, `seats` (1-16) para limitar concorrência por perfil e `initialVariables` para seed de variáveis `custom_*`.
 
-**Atalho [o] opcoes:** acessível de qualquer tela (exceto config/loading/executing). Permite trocar modelo planner ou worker individualmente (catálogo completo de 18 modelos) e criar pipeline profiles. Legenda `[o] opcoes` aparece no rodapé de cada tela.
+**Atalho [o] opcoes:** acessível de qualquer tela (exceto config/loading/executing). Permite trocar modelo planner ou worker individualmente (catálogo completo de 18 modelos), criar pipeline profiles manualmente ou via IA. Legenda `[o] opcoes` aparece no rodapé de cada tela.
+
+## AI Pipeline Builder
+
+Modo de criação de pipelines via IA. O usuário descreve o que deseja em linguagem natural e duas chamadas LLM sequenciais geram o perfil completo automaticamente.
+
+**Fluxo:** descrição → scope (local/global) → seats → modelo LLM → geração → preview → salvar.
+
+**Duas chamadas LLM:**
+1. **Steps:** gera steps, entryStepId, maxStepExecutions, initialVariables
+2. **Metadata:** gera id (kebab-case) e description a partir dos steps
+
+**Modelo default:** `deepseek/deepseek-chat`. Configurável para qualquer modelo suportado pelo LangChain via OpenRouter (DeepSeek, GPT, Claude, Gemini, Qwen).
+
+**Prompt engineering:** few-shot com 3 exemplos reais do sistema, contexto estruturado em XML tags (`<system_knowledge>`, `<few_shot_examples>`, `<output_format>`), output JSON puro sem fences.
+
+**Validação:** resultado passa por Zod (WorkerProfileSchema) + `validateProfileReferences()` antes de salvar.
 
 **Validação:** Zod `superRefine` (entryStepId, set_variable XOR, step IDs duplicados, namespace de initialVariables) + `validateProfileReferences()` (integridade referencial de targets)
 

@@ -10,7 +10,7 @@ import { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
 import { listProfiles } from '../services/profile-catalog.js';
-import { PipelineGraph } from '../components/pipeline-graph.js';
+import { PipelineTreeGraph } from '../components/pipeline-tree-graph.js';
 import { findStepTypeInfo } from '../components/step-field-defs.js';
 
 interface ProfileSelectScreenProps {
@@ -179,9 +179,9 @@ export const ProfileSelectScreen = ({ projectRoot, onSelect }: ProfileSelectScre
                   {/* Mini pipeline tree preview */}
                   <Box marginTop={1} flexDirection="column">
                     <Text bold dimColor>Pipeline:</Text>
-                    <PipelineGraph
+                    <PipelineTreeGraph
                       steps={[...profile.steps]}
-                      selectedStepId={null}
+                      entryStepId={profile.entryStepId}
                       compact
                     />
                   </Box>

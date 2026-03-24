@@ -185,9 +185,42 @@ Atalho `[o]` abre a tela de opcoes de qualquer tela (exceto config inicial, load
 A tela de opcoes permite:
 - **Modelo Planner** — selecao individual do catalogo completo de 18 modelos
 - **Modelo Worker** — selecao individual do catalogo completo de 18 modelos
-- **Criar Pipeline Profile** — wizard visual para montar perfis multi-step
+- **Gerar Pipeline com IA** — descreva em linguagem natural e a IA gera automaticamente
+- **Criar Pipeline Profile (manual)** — wizard visual para montar perfis step-by-step
 
 Ao trocar modelo, a mudanca e salva imediatamente e o usuario permanece na tela de opcoes — pode trocar um ou ambos sem sair. Ao criar perfil, o wizard valida referencias antes de salvar.
+
+### AI Pipeline Generator
+
+Modo de criacao automatica de pipelines via LangChain. Acessivel em `[o] opcoes` → `Gerar Pipeline com IA`.
+
+**Fluxo:**
+1. Descreva o que deseja (ex: "Escreva testes, implemente, revise e corrija ate passar")
+2. Escolha scope: local (projeto) ou global (todos os projetos)
+3. Defina seats: quantas instancias em paralelo (1-16)
+4. A IA gera o pipeline em 2 requests:
+   - Request 1: gera steps, variaveis, entry point e loop guard
+   - Request 2: gera ID (kebab-case) e descricao automaticamente
+5. Preview com visualizacao git-tree graph
+6. Confirme para salvar
+
+**Escolhas do usuario:** apenas scope e seats. Nome, descricao e toda a estrutura sao gerados automaticamente pela IA.
+
+**Modelo padrao:** DeepSeek V3 (via OpenRouter). Alteravel para qualquer modelo LangChain suportado via Modelo Worker nas opcoes.
+
+**Visualizacao git-tree:**
+```
+ ● init set_variable $custom_tries = 0
+ │
+ ● write-tests pi_agent Write tests for: $task
+ │
+ ● check condition $custom_tries >= 3
+ ├─✔ true ▸ END
+ └─✖ false ▸ increment
+ │
+ ● increment set_variable $custom_tries = $custom_tries + 1
+ └─ ◉ END
+```
 
 ### Selecao de modelos
 
@@ -229,9 +262,10 @@ src/
 │   ├── config-screen.tsx            # Config API key + selecao de modelos (setup inicial)
 │   ├── context-screen.tsx           # Selecao de arquivos/dirs
 │   ├── task-screen.tsx              # Input da macro-task
-│   ├── options-screen.tsx           # [o] Opcoes: modelos individuais + criar pipelines
+│   ├── options-screen.tsx           # [o] Opcoes: modelos individuais + criar/gerar pipelines
 │   ├── profile-select-screen.tsx    # Selecao de perfil antes da execucao
 │   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis (via opcoes)
+│   ├── pipeline-generator-screen.tsx # Geracao de pipeline via IA (LangChain)
 │   ├── dag-view-screen.tsx          # Visualizacao do DAG
 │   ├── execution-screen.tsx         # Dashboard de execucao real-time
 │   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
@@ -240,6 +274,8 @@ src/
 │   ├── model-table.tsx              # Tabela filtravel de 18 modelos
 │   ├── status-bar.tsx               # Barra informacional de modelos atuais
 │   ├── pipeline-trace.tsx           # Trace step-by-step de execucao de pipeline
+│   ├── pipeline-graph.tsx           # Grafo de pipeline estilo git tree (builder)
+│   ├── pipeline-tree-graph.tsx      # Grafo de pipeline estilo git tree (preview/generator)
 │   ├── dag-node-row.tsx             # Linha de no do DAG
 │   ├── tree-node.tsx                # No da arvore de arquivos
 │   └── worker-log.tsx               # Log streaming por worker
@@ -250,6 +286,7 @@ src/
 ├── agents/
 │   ├── explorer.agent.ts            # Sub-agente ReAct (LangChain)
 │   ├── explorer-tools.ts            # Tools read-only do Explorer
+│   ├── pipeline-generator.ts        # Gerador de pipeline via LangChain (2 requests LLM)
 │   └── worker-runner.ts             # Runner do Pi Agent SDK
 ├── pipeline/
 │   ├── orchestrator.ts              # Pipeline end-to-end (planner -> DAG -> workers)
@@ -282,7 +319,7 @@ src/
     └── path-guard.ts                # Protecao contra path traversal
 ```
 
-55 arquivos, ~7.000 LOC (media ~127 LOC/arquivo).
+58 arquivos, ~7.800 LOC (media ~134 LOC/arquivo).
 
 ## Padroes de codigo
 

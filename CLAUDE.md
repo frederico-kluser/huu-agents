@@ -34,24 +34,27 @@ src/
 │   ├── worker-profile.schema.ts     # Perfis de pipeline: steps, validação, catálogo
 │   ├── worker-pipeline-state.schema.ts  # Estado efêmero de runtime do pipeline
 │   └── errors.ts                    # Mensagens de erro de config
-├── screens/                         # 10 telas Ink
+├── screens/                         # 11 telas Ink
 │   ├── config-screen.tsx            # API key + seleção de modelos (setup inicial)
 │   ├── context-screen.tsx           # Seleção de arquivos/dirs
 │   ├── task-screen.tsx              # Input da macro-task
-│   ├── options-screen.tsx           # [o] Opcoes: modelos individuais + criar pipelines
+│   ├── options-screen.tsx           # [o] Opcoes: modelos individuais + criar/gerar pipelines
 │   ├── profile-select-screen.tsx    # Seleção de perfil antes da execução
 │   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis (via opcoes)
+│   ├── pipeline-generator-screen.tsx # Geração de pipeline via IA (LangChain)
 │   ├── dag-view-screen.tsx          # Visualização do DAG
 │   ├── execution-screen.tsx         # Dashboard de execução real-time
 │   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
 │   └── diff-screen.tsx              # Diff completo da branch
-├── components/                      # 6 componentes
+├── components/                      # 8 componentes
 │   ├── model-table.tsx              # Tabela filtrável de modelos OpenRouter
 │   ├── status-bar.tsx               # Barra informacional de modelos atuais
 │   ├── pipeline-trace.tsx           # Trace step-by-step de pipeline
+│   ├── pipeline-graph.tsx           # Grafo de pipeline estilo git tree (builder)
+│   ├── pipeline-tree-graph.tsx      # Grafo de pipeline estilo git tree (preview/generator)
 │   ├── dag-node-row.tsx, tree-node.tsx, worker-log.tsx
 ├── prompts/                         # Planner, Explorer, Worker (adaptados por provider)
-├── agents/                          # Explorer ReAct (LangChain), Worker Runner (Pi SDK)
+├── agents/                          # Explorer ReAct (LangChain), Worker Runner (Pi SDK), Pipeline Generator
 ├── pipeline/
 │   ├── orchestrator.ts              # Pipeline end-to-end (planner → DAG → workers)
 │   ├── planner.pipeline.ts          # Planner + Explorer + Zod validation
@@ -72,7 +75,7 @@ src/
 └── utils/                           # file-tree, path-guard
 ```
 
-55 arquivos, ~7.000 LOC (~127 LOC/arquivo).
+58 arquivos, ~7.800 LOC (~134 LOC/arquivo).
 
 ## Worker Pipeline Profiles
 
@@ -93,6 +96,26 @@ Perfis definem pipelines multi-step dentro de cada worker. O DAG permanece como 
 **Validação:** Zod `superRefine` (entryStepId, set_variable XOR, step IDs duplicados, namespace de initialVariables) + `validateProfileReferences()` (integridade referencial de targets)
 
 **Runtime:** imutável (spread operators), seed de `initialVariables`, loop guard via `maxStepExecutions`, trace com timestamps epoch
+
+## AI Pipeline Generator
+
+Modo de criação automática de pipelines via LangChain. O usuário descreve em linguagem natural o que deseja e a IA gera o pipeline completo.
+
+**Fluxo:** descrição NL → scope (local/global) → seats → LLM gera steps (request 1) → LLM gera metadados (request 2) → preview com git-tree graph → salvar
+
+**Duas requests LLM:**
+1. Gera `steps`, `entryStepId`, `initialVariables`, `maxStepExecutions` a partir da descrição
+2. Gera `id` (kebab-case) e `description` a partir do pipeline + descrição original
+
+**Escolhas do usuário:** apenas scope (local/global) e seats (1-16). Nome, descrição e toda estrutura são gerados automaticamente.
+
+**Modelo padrão:** DeepSeek V3 via OpenRouter. Pode ser alterado para qualquer modelo LangChain suportado via [o] opcoes → Modelo Worker.
+
+**Prompt:** XML-structured com few-shot learning (3 exemplos canônicos), referência completa do schema de steps, e princípios de story-breaking (3 atos: setup → execução → resolução).
+
+**Visualização:** Pipelines são exibidos como git tree graphs com commits (●), branches para conditions (├─✔/└─✖), loops (↩) e END markers (◉).
+
+**Acesso:** [o] opcoes → Gerar Pipeline com IA
 
 ## Convenções de código
 

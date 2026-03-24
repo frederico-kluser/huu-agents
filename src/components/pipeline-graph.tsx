@@ -1,6 +1,19 @@
 /**
- * Visualizacao em arvore do pipeline de steps.
- * Renderiza fluxo com cores por tipo, icones, variaveis e conexoes.
+ * Visualizacao de pipeline no estilo git tree graph.
+ * Renderiza steps como commits com branches visuais para conditions.
+ * Usado no profile-builder-screen (interativo) e profile-select-screen (preview).
+ *
+ * Estilo inspirado em `git log --graph --oneline`:
+ *  ● init set_variable $custom_tries = 0
+ *  │
+ *  ● write-tests pi_agent "Write tests for: $task"
+ *  │
+ *  ● check condition $custom_tries >= 3
+ *  ├─✔ true ▸ __end__
+ *  └─✖ false ▸ increment
+ *  │
+ *  ● increment set_variable $custom_tries = $custom_tries + 1
+ *  └─ ◉ END
  *
  * @module
  */
@@ -16,28 +29,43 @@ interface PipelineGraphProps {
   readonly compact?: boolean;
 }
 
+/** Caracteres git-graph Unicode */
+const G = {
+  commit: '\u25CF',       // ● filled circle
+  line: '\u2502',         // │ vertical
+  tee: '\u251C',          // ├ tee right
+  corner: '\u2514',       // └ bottom corner
+  dash: '\u2500',         // ─ horizontal
+  arrow: '\u25B8',        // ▸ small arrow
+  end: '\u25C9',          // ◉ end marker
+  loop: '\u21A9',         // ↩ loop back
+  checkTrue: '\u2714',    // ✔
+  checkFalse: '\u2716',   // ✖
+  selector: '\u25B6',     // ▶ selection indicator
+} as const;
+
 /**
- * Grafo textual navegavel de steps com arvore visual.
- * Cores por tipo: AI=green, control=yellow/cyan, data=blue/white, error=red.
+ * Git-tree-style pipeline graph.
+ * Supports interactive selection (for builder) and compact preview mode.
  *
- * @param props - Steps e selecao atual
- * @returns Componente de visualizacao do grafo
+ * @param props - Steps, selection state, display mode
  *
  * @example
  * <PipelineGraph steps={steps} selectedStepId="2" />
+ * <PipelineGraph steps={steps} selectedStepId={null} compact />
  */
 export function PipelineGraph({ steps, selectedStepId, compact = false }: PipelineGraphProps) {
   if (steps.length === 0) {
     return (
       <Box flexDirection="column">
         <Text dimColor>Nenhum step ainda. Use [a] para adicionar o primeiro.</Text>
-        <Text dimColor>  {'\u25C9'} END</Text>
+        <Text dimColor>  {G.end} END</Text>
       </Box>
     );
   }
 
   const stepMap = new Map(steps.map((step): [string, WorkerStep] => [step.id, step]));
-  const ordered = [...steps].sort((left, right) => compareIds(left.id, right.id));
+  const ordered = [...steps].sort(compareByIds);
 
   return (
     <Box flexDirection="column">
@@ -47,39 +75,71 @@ export function PipelineGraph({ steps, selectedStepId, compact = false }: Pipeli
         const info = findStepTypeInfo(step.type);
         const icon = info?.icon ?? '?';
         const color = info?.color ?? 'white';
+        const links = getStepLinks(step);
+        const hasBackRef = links.some(
+          (l) => l.target !== END_STEP_ID && stepMap.has(l.target) &&
+            ordered.findIndex((s) => s.id === l.target) <= index,
+        );
 
         return (
           <Box key={step.id} flexDirection="column">
-            {/* Step principal */}
+            {/* Commit line */}
             <Box>
               <Text color={isSelected ? 'cyan' : 'gray'}>
-                {isSelected ? '\u25B6 ' : '  '}
+                {isSelected ? G.selector : ' '}
               </Text>
+              <Text color={isSelected ? 'cyan' : color}>{G.commit} </Text>
               <Text color={color}>{icon} </Text>
               <Text color={isSelected ? 'cyan' : 'white'} bold={isSelected}>
-                [{step.id}]
+                {step.id}
               </Text>
-              <Text color={color}> {step.type} </Text>
-              <Text dimColor>{stepSummary(step)}</Text>
+              <Text color={color}> {step.type}</Text>
+              {!compact && <Text dimColor> {stepSummary(step)}</Text>}
+              {hasBackRef && <Text color="yellow"> {G.loop}</Text>}
             </Box>
 
-            {/* Detalhe de variaveis (modo nao-compacto) */}
+            {/* Variable detail (non-compact, selected) */}
             {!compact && isSelected && (
-              <Box marginLeft={5} flexDirection="column">
+              <Box marginLeft={3} flexDirection="column">
                 {renderVariableInfo(step)}
               </Box>
             )}
 
-            {/* Conexoes / links */}
-            {renderTreeLinks(step, stepMap, isLast)}
+            {/* Branch visualization */}
+            {step.type === 'condition' ? (
+              renderConditionBranches(step, stepMap, ordered, index)
+            ) : (
+              /* Connection line */
+              !isLast && links.length > 0 && (
+                <Box>
+                  <Text dimColor> {G.line}</Text>
+                </Box>
+              )
+            )}
+
+            {/* Direct END pointer for non-condition last steps */}
+            {isLast && step.type !== 'condition' && links.some((l) => l.target === END_STEP_ID) && (
+              <Box>
+                <Text dimColor> {G.corner}{G.dash} </Text>
+                <Text color="green" bold>{G.end} END</Text>
+              </Box>
+            )}
           </Box>
         );
       })}
-      <Box>
-        <Text dimColor>  {'\u25C9'} </Text>
-        <Text color="green" bold>END</Text>
-        <Text dimColor> (pipeline concluida com sucesso)</Text>
-      </Box>
+
+      {/* Terminal END */}
+      {!ordered.some((s, i) => {
+        const links = getStepLinks(s);
+        return i === ordered.length - 1 && links.some((l) => l.target === END_STEP_ID);
+      }) && (
+        <Box>
+          <Text dimColor> {G.corner}{G.dash} </Text>
+          <Text color="green" bold>{G.end} END</Text>
+        </Box>
+      )}
+
+      {/* Builder shortcuts (non-compact) */}
       {!compact && (
         <Box marginTop={1} gap={2}>
           <Text dimColor>[a] add step</Text>
@@ -92,73 +152,51 @@ export function PipelineGraph({ steps, selectedStepId, compact = false }: Pipeli
   );
 }
 
-/** Renderiza linhas de conexao entre steps */
-function renderTreeLinks(
+/** Renders condition branches in git-graph style */
+function renderConditionBranches(
   step: WorkerStep,
-  stepMap: ReadonlyMap<string, WorkerStep>,
-  isLast: boolean,
+  _stepMap: ReadonlyMap<string, WorkerStep>,
+  ordered: readonly WorkerStep[],
+  currentIdx: number,
 ) {
-  const links = getStepLinks(step);
+  if (step.type !== 'condition') return null;
 
-  if (links.length === 0) {
-    // fail step — sem conexao
-    return isLast ? null : <Text dimColor color="red">  {'\u2502'}</Text>;
-  }
+  const trueTarget = step.whenTrue;
+  const falseTarget = step.whenFalse;
 
-  if (links.length === 1) {
-    const link = links[0]!;
-    const isEnd = link.target === END_STEP_ID;
-    const isBackRef = !isEnd && stepMap.has(link.target);
+  const renderTarget = (target: string, isTrue: boolean, isLast: boolean) => {
+    const prefix = isLast ? G.corner : G.tee;
+    const isEnd = target === END_STEP_ID;
+    const isBack = !isEnd && ordered.findIndex((s) => s.id === target) <= currentIdx;
+
     return (
-      <Box flexDirection="column">
-        <Box marginLeft={2}>
-          <Text dimColor>{'\u2502'}</Text>
-        </Box>
+      <Box>
+        <Text dimColor> {prefix}{G.dash}</Text>
+        <Text color={isTrue ? 'green' : 'red'}>
+          {isTrue ? G.checkTrue : G.checkFalse}{' '}
+        </Text>
+        <Text dimColor>{isTrue ? 'true' : 'false'} {G.arrow} </Text>
         {isEnd ? (
-          <Box marginLeft={2}>
-            <Text dimColor>{isLast ? '\u2514' : '\u251C'}{'\u2500\u2500\u25B6'} </Text>
-            <Text color="green">END</Text>
-          </Box>
+          <Text color="green" bold>END</Text>
         ) : (
-          <Box marginLeft={2}>
-            <Text dimColor>{isLast ? '\u2514' : '\u251C'}{'\u2500\u2500\u25B6'} </Text>
-            <Text color="white">[{link.target}]</Text>
-            {isBackRef && <Text color="yellow"> {'\u21A9'} loop</Text>}
-          </Box>
+          <>
+            <Text color="white">{target}</Text>
+            {isBack && <Text color="yellow"> {G.loop}</Text>}
+          </>
         )}
       </Box>
     );
-  }
+  };
 
-  // Multiple links (condition)
   return (
     <Box flexDirection="column">
-      <Box marginLeft={2}>
-        <Text dimColor>{'\u2502'}</Text>
-      </Box>
-      {links.map((link, index) => {
-        const isLastLink = index === links.length - 1;
-        const prefix = isLastLink ? '\u2514' : '\u251C';
-        const isEnd = link.target === END_STEP_ID;
-        const isBackRef = !isEnd && stepMap.has(link.target);
-        return (
-          <Box key={`${link.target}-${link.label}`} marginLeft={2}>
-            <Text dimColor>{prefix}{'\u2500'}</Text>
-            <Text color={link.label === 'true' ? 'green' : 'red'}>
-              {link.label === 'true' ? '\u2714' : '\u2716'}{' '}
-            </Text>
-            <Text dimColor>{link.label}: </Text>
-            {isEnd ? (
-              <Text color="green">END</Text>
-            ) : (
-              <>
-                <Text color="white">[{link.target}]</Text>
-                {isBackRef && <Text color="yellow"> {'\u21A9'}</Text>}
-              </>
-            )}
-          </Box>
-        );
-      })}
+      {renderTarget(trueTarget, true, false)}
+      {renderTarget(falseTarget, false, true)}
+      {currentIdx < ordered.length - 1 && (
+        <Box>
+          <Text dimColor> {G.line}</Text>
+        </Box>
+      )}
     </Box>
   );
 }
@@ -168,7 +206,6 @@ interface StepLink {
   readonly label: string;
 }
 
-/** Extrai links de navegacao de um step */
 function getStepLinks(step: WorkerStep): readonly StepLink[] {
   switch (step.type) {
     case 'pi_agent':
@@ -184,15 +221,14 @@ function getStepLinks(step: WorkerStep): readonly StepLink[] {
     case 'goto':
       return [{ target: step.target, label: 'goto' }];
     case 'fail':
+    default:
       return [];
   }
 }
 
-/** Renderiza info de variaveis do step selecionado */
 function renderVariableInfo(step: WorkerStep) {
   const info = findStepTypeInfo(step.type);
   if (!info) return null;
-
   return (
     <Box flexDirection="column">
       <Text dimColor>Le: {info.canRead}</Text>
@@ -201,13 +237,12 @@ function renderVariableInfo(step: WorkerStep) {
   );
 }
 
-/** Gera resumo de uma linha para cada step */
 function stepSummary(step: WorkerStep): string {
   switch (step.type) {
     case 'pi_agent':
-      return `"${truncate(step.taskTemplate, 40)}"`;
+      return truncate(step.taskTemplate, 45);
     case 'langchain_prompt':
-      return `-> $${step.outputTarget}  "${truncate(step.inputTemplate, 30)}"`;
+      return `$${step.outputTarget} <- ${truncate(step.inputTemplate, 35)}`;
     case 'condition':
       return truncate(step.expression, 40);
     case 'goto':
@@ -218,21 +253,23 @@ function stepSummary(step: WorkerStep): string {
     case 'git_diff':
       return `-> $${step.target}`;
     case 'fail':
-      return `"${truncate(step.messageTemplate, 40)}"`;
+      return truncate(step.messageTemplate, 45);
   }
+  return '';
 }
 
 function truncate(value: string, max: number): string {
-  return value.length <= max ? value : `${value.slice(0, max - 1)}\u2026`;
+  const clean = value.replace(/\n/g, ' ').trim();
+  return clean.length <= max ? clean : `${clean.slice(0, max - 1)}\u2026`;
 }
 
-function compareIds(left: string, right: string): number {
-  const leftNum = Number.parseInt(left, 10);
-  const rightNum = Number.parseInt(right, 10);
+function compareByIds(left: WorkerStep, right: WorkerStep): number {
+  const leftNum = Number.parseInt(left.id, 10);
+  const rightNum = Number.parseInt(right.id, 10);
   const leftNumeric = Number.isFinite(leftNum);
   const rightNumeric = Number.isFinite(rightNum);
   if (leftNumeric && rightNumeric) return leftNum - rightNum;
   if (leftNumeric && !rightNumeric) return -1;
   if (!leftNumeric && rightNumeric) return 1;
-  return left.localeCompare(right);
+  return left.id.localeCompare(right.id);
 }

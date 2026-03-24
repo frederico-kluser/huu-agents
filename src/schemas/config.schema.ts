@@ -30,6 +30,11 @@ const RawConfigSchema = z.object({
     .string()
     .min(1)
     .describe('OpenRouter API key for LLM access'),
+  artificialAnalysisApiKey: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Artificial Analysis API key for benchmark data (optional)'),
   plannerModel: z
     .string()
     .min(1)
@@ -89,6 +94,7 @@ export const ConfigSchema = RawConfigSchema.transform((raw) => {
 
   return {
     openrouterApiKey: raw.openrouterApiKey,
+    artificialAnalysisApiKey: raw.artificialAnalysisApiKey,
     plannerModel: planner,
     workerModel: worker,
     selectedAgents: { planner, worker },

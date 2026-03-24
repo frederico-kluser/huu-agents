@@ -183,15 +183,13 @@ Perfis de worker definem pipelines declarativas multi-step que substituem a exec
 
 Atalho `[o]` abre a tela de opcoes de qualquer tela (exceto config inicial, loading e execucao). A legenda `[o] opcoes` aparece no rodape de cada tela junto com as demais keybindings.
 
-A tela de opcoes permite:
-- **OpenRouter API Key** — alterar a chave de API do OpenRouter
-- **Artificial Analysis Key** — configurar ou remover a chave da Artificial Analysis (habilita benchmarks)
-- **Modelo Planner** — selecao individual com tabela avancada (benchmarks, filtros, ordenacao, ESC para cancelar)
-- **Modelo Worker** — selecao individual com tabela avancada (benchmarks, filtros, ordenacao, ESC para cancelar)
-- **AI Pipeline Builder** — descreva o que deseja e a IA gera a pipeline automaticamente
-- **Criar Pipeline Manual** — wizard visual para montar perfis multi-step
+Menu principal de opcoes com sub-menus:
+- **API Keys** — sub-menu para configurar OpenRouter (obrigatoria) e Artificial Analysis (opcional, habilita benchmarks)
+- **Modelos** — sub-menu para selecao individual de Planner e Worker (travado se OpenRouter key nao estiver configurada)
+- **Pipeline Profiles** — sub-menu para criacao de pipelines via IA (AI Builder) ou manualmente (Wizard)
+- **Guia de Referencia** — documentacao sobre step types, variaveis e exemplos
 
-Ao trocar modelo ou key, a mudanca e salva imediatamente e o usuario permanece na tela de opcoes. ESC cancela a selecao de modelo e volta ao menu. Ao criar perfil, o wizard valida referencias antes de salvar.
+Ao trocar modelo ou key, a mudanca e salva imediatamente e o usuario permanece no sub-menu. ESC cancela a selecao de modelo e volta ao sub-menu. Ao criar perfil, o wizard valida referencias antes de salvar. Sem a Artificial Analysis API key, benchmarks nao aparecem na tabela de modelos.
 
 ### AI Pipeline Builder
 
@@ -223,8 +221,8 @@ Catalogo dinamico de modelos via OpenRouter API, com tabela avancada acessivel v
 |---------|-----------|
 | Scroll horizontal | h/l para ver todas as colunas (benchmarks, velocidade, custo-beneficio) |
 | Ordenacao | s para ciclar criterio (preco, intel, code, math, I/$, tok/s), S para inverter |
-| Filtros preset | f para ciclar: todos, com benchmarks, intel >= 40, I/$ >= 20, > 80 tok/s |
-| Filtro texto | Busca por nome, provider, id ou tokenizer em tempo real |
+| Filtros preset | p para ciclar: todos, com benchmarks, intel >= 40, I/$ >= 20, > 80 tok/s |
+| Filtro texto | f para ativar digitacao, ESC/Enter para confirmar e voltar a navegacao |
 | Benchmarks AA | Intelligence Index, Coding, Math, MMLU-Pro, GPQA, HLE, LiveCodeBench, SciCode, MATH-500, AIME |
 | Velocidade AA | Tokens/s (mediana P50), Time-to-First-Token |
 | Custo-beneficio | I/$ = Intelligence Index / preco blended — maior = melhor |
@@ -262,7 +260,7 @@ src/
 │   ├── config-screen.tsx            # Config API keys (OpenRouter + AA) + selecao de modelos
 │   ├── context-screen.tsx           # Selecao de arquivos/dirs
 │   ├── task-screen.tsx              # Input da macro-task
-│   ├── options-screen.tsx           # [o] Opcoes: API keys, modelos, AI builder, pipeline manual
+│   ├── options-screen.tsx           # [o] Opcoes: sub-menus (API Keys, Modelos, Pipelines, Guia)
 │   ├── profile-select-screen.tsx    # Selecao de perfil antes da execucao
 │   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis (via opcoes)
 │   ├── ai-pipeline-builder-screen.tsx  # Criacao de pipeline via IA (LangChain)

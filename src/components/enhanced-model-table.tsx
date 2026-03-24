@@ -247,7 +247,8 @@ interface EnhancedModelTableProps {
  * - h/l ou Shift+setas: scroll horizontal (colunas)
  * - s: ciclar ordenacao (preco, intel, code, math, custo-beneficio, velocidade)
  * - S (shift+s): inverter direcao da ordenacao
- * - f: ciclar filtro preset (todos, com benchmarks, high intel, best value, fast)
+ * - f: ativar filtro de texto (ESC/Enter para sair)
+ * - p: ciclar filtro preset (todos, com benchmarks, high intel, best value, fast)
  * - Enter: selecionar modelo
  *
  * @example
@@ -263,6 +264,7 @@ export const EnhancedModelTable = ({
   onCancel,
 }: EnhancedModelTableProps) => {
   const [filter, setFilter] = useState('');
+  const [filterActive, setFilterActive] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [colOffset, setColOffset] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>('inputPrice');
@@ -353,10 +355,17 @@ export const EnhancedModelTable = ({
   const scrollOffset = Math.max(0, safeCursor - maxRows + 1);
   const visible = sorted.slice(scrollOffset, scrollOffset + maxRows);
 
+  // Navigation mode: keys control table (active when filter is NOT focused)
   useInput((input, key) => {
     // ESC to cancel
     if (key.escape && onCancel) {
       onCancel();
+      return;
+    }
+
+    // f activates filter text input
+    if (input === 'f') {
+      setFilterActive(true);
       return;
     }
 
@@ -388,7 +397,7 @@ export const EnhancedModelTable = ({
     }
 
     // Filter preset cycling
-    if (input === 'f') {
+    if (input === 'p') {
       setFilterMode((prev) => {
         const idx = FILTER_CYCLE.indexOf(prev);
         return FILTER_CYCLE[(idx + 1) % FILTER_CYCLE.length]!;
@@ -400,7 +409,15 @@ export const EnhancedModelTable = ({
     if (key.return && sorted[safeCursor]) {
       onSelect(sorted[safeCursor]!);
     }
-  });
+  }, { isActive: !filterActive });
+
+  // Filter input mode: ESC or Enter exits filter
+  useInput((_input, key) => {
+    if (key.escape || key.return) {
+      setFilterActive(false);
+      setCursor(0);
+    }
+  }, { isActive: filterActive });
 
   const sortLabel = availableCols.find((c) => c.key === sortKey)?.label ?? sortKey;
 
@@ -411,17 +428,24 @@ export const EnhancedModelTable = ({
         {title && <Text bold color="cyan">{title}</Text>}
         <Box marginTop={1} gap={2}>
           <Box>
-            <Text dimColor>Filtro: </Text>
-            <TextInput
-              value={filter}
-              onChange={(v) => { setFilter(v); setCursor(0); }}
-              placeholder="nome, provider, id..."
-            />
+            {filterActive ? (
+              <>
+                <Text color="green" bold>Filtro: </Text>
+                <TextInput
+                  value={filter}
+                  onChange={(v) => { setFilter(v); setCursor(0); }}
+                  placeholder="nome, provider, id..."
+                  focus={true}
+                />
+              </>
+            ) : (
+              <Text dimColor>Filtro: {filter || '(f para digitar)'}</Text>
+            )}
           </Box>
           <Text dimColor>|</Text>
           <Text color="yellow">Sort: {sortLabel} {sortAsc ? '\u2191' : '\u2193'}</Text>
           <Text dimColor>|</Text>
-          <Text color="magenta">F: {FILTER_LABELS[filterMode]}</Text>
+          <Text color="magenta">P: {FILTER_LABELS[filterMode]}</Text>
         </Box>
       </Box>
 
@@ -472,7 +496,7 @@ export const EnhancedModelTable = ({
       {/* Footer */}
       <Box marginTop={1} flexDirection="column">
         <Text dimColor>
-          j/k:navegar  h/l:scroll cols  s:ordenar  S:inverter  f:filtro  Enter:selecionar  {onCancel ? 'ESC:voltar  ' : ''}{sorted.length}/{models.length}
+          j/k:navegar  h/l:scroll cols  s:ordenar  S:inverter  f:filtro texto  p:preset  Enter:selecionar  {onCancel ? 'ESC:voltar  ' : ''}{sorted.length}/{models.length}
         </Text>
         {colOffset > 0 && (
           <Text dimColor color="yellow">{'<'} mais colunas a esquerda</Text>

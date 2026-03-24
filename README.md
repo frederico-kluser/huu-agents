@@ -219,10 +219,13 @@ Catalogo dinamico de modelos via OpenRouter API, com tabela avancada acessivel v
 
 | Feature | Descricao |
 |---------|-----------|
-| Scroll horizontal | h/l para ver todas as colunas (benchmarks, velocidade, custo-beneficio) |
-| Ordenacao | s para ciclar criterio (preco, intel, code, math, I/$, tok/s), S para inverter |
-| Filtros preset | p para ciclar: todos, com benchmarks, intel >= 40, I/$ >= 20, > 80 tok/s |
-| Filtro texto | f para ativar digitacao, ESC/Enter para confirmar e voltar a navegacao |
+| Scroll horizontal | setas esquerda/direita para ver todas as colunas |
+| Scroll vertical | setas cima/baixo para navegar, `<` `>` para pagina |
+| Seletor de ordenacao | `s` abre seletor de metrica para ordenar, `S` inverte direcao |
+| Seletor de colunas | `c` abre modal de checkboxes para escolher metricas visiveis (com descricoes) |
+| Filtros preset | `p` para ciclar: todos, com benchmarks, intel >= 40, I/$ >= 20, > 80 tok/s |
+| Filtro texto | `f` para digitar filtros compostos (texto: OR, metricas: AND) |
+| Construtor filtros | `F` abre modal visual para construir filtros |
 | Benchmarks AA | Intelligence Index, Coding, Math, MMLU-Pro, GPQA, HLE, LiveCodeBench, SciCode, MATH-500, AIME |
 | Velocidade AA | Tokens/s (mediana P50), Time-to-First-Token |
 | Custo-beneficio | I/$ = Intelligence Index / preco blended — maior = melhor |
@@ -270,7 +273,12 @@ src/
 │   └── diff-screen.tsx              # Diff completo da branch
 ├── components/
 │   ├── model-table.tsx              # Tabela basica de modelos OpenRouter
-│   ├── enhanced-model-table.tsx     # Tabela avancada com scroll horizontal, sort, benchmarks AA
+│   ├── enhanced-model-table.tsx     # Tabela avancada com scroll, sort selector, column selector
+│   ├── column-selector-modal.tsx    # Modal de checkboxes para metricas visiveis
+│   ├── sort-selector-modal.tsx      # Modal seletor de criterio de ordenacao
+│   ├── table-columns.ts            # Definicoes de colunas (label, description, sortable)
+│   ├── filter-parser.ts            # Parser de filtros compostos (texto OR, metricas AND)
+│   ├── filter-builder-modal.tsx     # Modal visual para construir filtros
 │   ├── status-bar.tsx               # Barra informacional de modelos atuais
 │   ├── pipeline-trace.tsx           # Trace step-by-step de execucao de pipeline
 │   ├── dag-node-row.tsx             # Linha de no do DAG
@@ -319,7 +327,7 @@ src/
     └── path-guard.ts                # Protecao contra path traversal
 ```
 
-62 arquivos, ~8.500 LOC (~137 LOC/arquivo).
+77 arquivos, ~13.000 LOC (~169 LOC/arquivo).
 
 ## Padroes de codigo
 

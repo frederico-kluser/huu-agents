@@ -1,11 +1,11 @@
 /**
  * Tabela avancada de modelos LLM com:
- * - Filtros compostos pipe-separated ($Metric>=val|texto) com UNION
+ * - Filtros compostos pipe-separated (texto: OR | metricas: AND)
  * - Scroll horizontal (setas esquerda/direita)
- * - Scroll vertical (setas cima/baixo, Shift para pagina)
- * - Ordenacao multi-criterio (s para ciclar, S para inverter)
+ * - Scroll vertical (setas cima/baixo, <> para pagina)
+ * - Seletor de ordenacao (s) e inversao de direcao (S)
+ * - Seletor de colunas de metricas (c)
  * - Modal visual de filtros (F)
- * - Footer com legendas de benchmarks em 3 linhas coloridas
  *
  * @module
  */
@@ -16,16 +16,16 @@ import TextInput from 'ink-text-input';
 import type { EnrichedModel } from '../data/enriched-model.js';
 import { parseFilterString, applyFilters } from './filter-parser.js';
 import { FilterBuilderModal } from './filter-builder-modal.js';
+import { ColumnSelectorModal } from './column-selector-modal.js';
+import { SortSelectorModal } from './sort-selector-modal.js';
 import {
-  COLUMNS, SORT_CYCLE, FILTER_LABELS, FILTER_CYCLE,
+  COLUMNS, DEFAULT_VISIBLE_METRICS, FILTER_LABELS, FILTER_CYCLE,
   pad, padR,
-  type ColumnDef, type SortKey, type FilterMode,
+  type SortKey, type FilterMode,
 } from './table-columns.js';
 
 // Header (border+title+filter+border) + table header + separator
 const FIXED_HEADER = 7;
-// Footer: nav + 2 benchmark lines + scroll indicators
-const FIXED_FOOTER = 5;
 
 // ── Props ───────────────────────────────────────────────────────────
 
@@ -39,13 +39,14 @@ interface EnhancedModelTableProps {
 
 /**
  * Tabela avancada de selecao de modelos com filtros compostos,
- * scroll bidirecional e legendas de benchmark.
+ * scroll bidirecional, seletor de colunas e ordenacao.
  *
  * Navegacao:
  * - Setas cima/baixo: navegar verticalmente
- * - Shift+setas ou PageUp/PageDown: pagina inteira
+ * - < >: pagina anterior/proxima
  * - Setas esquerda/direita: scroll horizontal (colunas)
- * - s: ciclar ordenacao | S: inverter direcao
+ * - s: seletor de ordenacao | S: inverter direcao
+ * - c: seletor de colunas de metricas
  * - f: filtro texto (pipe-separated: $Intel>=40|gpt)
  * - F: modal visual de filtros compostos
  * - p: ciclar filtro preset | Enter: selecionar | ESC: voltar
@@ -58,26 +59,51 @@ interface EnhancedModelTableProps {
 export const EnhancedModelTable = ({
   models, onSelect, title, hasAAData, onCancel,
 }: EnhancedModelTableProps) => {
+  // Core state
   const [filter, setFilter] = useState('');
   const [filterActive, setFilterActive] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [colOffset, setColOffset] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>('inputPrice');
   const [sortAsc, setSortAsc] = useState(true);
   const [filterMode, setFilterMode] = useState<FilterMode>('none');
+
+  // Modal state
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [columnSelectorOpen, setColumnSelectorOpen] = useState(false);
+  const [sortSelectorOpen, setSortSelectorOpen] = useState(false);
+
+  // Column visibility (only metric/speed columns toggleable)
+  const [visibleMetrics, setVisibleMetrics] = useState<ReadonlySet<string>>(DEFAULT_VISIBLE_METRICS);
+
+  // Terminal dimensions
   const { stdout } = useStdout();
   const termCols = stdout?.columns ?? 120;
   const termRows = stdout?.rows ?? 24;
-  const maxRows = Math.max(3, termRows - FIXED_HEADER - FIXED_FOOTER);
+  const anyModalOpen = filterModalOpen || columnSelectorOpen || sortSelectorOpen;
+  const footerLines = (filterActive || anyModalOpen) ? 0 : 2;
+  const maxRows = Math.max(3, termRows - FIXED_HEADER - footerLines);
 
+  // Available columns: base always + visible metrics when hasAAData
   const availableCols = useMemo(() =>
-    COLUMNS.filter((c) => c.group === 'base' || hasAAData),
-  [hasAAData]);
+    COLUMNS.filter((c) => c.group === 'base' || (hasAAData && visibleMetrics.has(c.key))),
+  [hasAAData, visibleMetrics]);
 
+  // Sortable columns for the selector
+  const sortableCols = useMemo(() =>
+    availableCols.filter((c) => c.sortable),
+  [availableCols]);
+
+  // Reset sort key if it became invisible
+  const effectiveSortKey = useMemo(() => {
+    if (availableCols.some((c) => c.key === sortKey)) return sortKey;
+    return 'inputPrice';
+  }, [sortKey, availableCols]);
+
+  // Visible columns (horizontal scroll window)
   const visibleCols = useMemo(() => {
     let w = 0;
-    const cols: ColumnDef[] = [];
+    const cols: typeof availableCols[number][] = [];
     for (let i = colOffset; i < availableCols.length; i++) {
       const col = availableCols[i]!;
       if (w + col.width + 1 > termCols - 4) break;
@@ -89,7 +115,7 @@ export const EnhancedModelTable = ({
 
   const maxColOffset = Math.max(0, availableCols.length - visibleCols.length);
 
-  // Filtrar: pipe rules (UNION) + preset (AND)
+  // Filtrar: text OR + metric AND + preset (all AND'd)
   const filtered = useMemo(() => {
     const rules = parseFilterString(filter);
     let result = rules.length > 0 ? [...applyFilters(models, rules)] : [...models];
@@ -112,7 +138,7 @@ export const EnhancedModelTable = ({
 
   // Ordenar
   const sorted = useMemo(() => {
-    const col = availableCols.find((c) => c.key === sortKey);
+    const col = availableCols.find((c) => c.key === effectiveSortKey);
     if (!col) return filtered;
     return [...filtered].sort((a, b) => {
       const va = col.getValue(a);
@@ -122,7 +148,7 @@ export const EnhancedModelTable = ({
       if (vb === null) return -1;
       return sortAsc ? va - vb : vb - va;
     });
-  }, [filtered, sortKey, sortAsc, availableCols]);
+  }, [filtered, effectiveSortKey, sortAsc, availableCols]);
 
   const safeCursor = Math.min(cursor, Math.max(0, sorted.length - 1));
   const scrollOffset = Math.max(0, safeCursor - maxRows + 1);
@@ -133,26 +159,24 @@ export const EnhancedModelTable = ({
   useInput((input, key) => {
     if (key.escape && onCancel) { onCancel(); return; }
     if (input === 'f' && !key.shift) { setFilterActive(true); return; }
-    if (input === 'F' || (input === 'f' && key.shift)) { setModalOpen(true); return; }
+    if (input === 'F' || (input === 'f' && key.shift)) { setFilterModalOpen(true); return; }
+    if (input === 'c') { setColumnSelectorOpen(true); return; }
+    if (input === 's' && !key.shift) { setSortSelectorOpen(true); return; }
+    if (input === 'S' || (input === 's' && key.shift)) setSortAsc((prev) => !prev);
 
     // Vertical
-    if (key.downArrow) setCursor((c) => Math.min(c + (key.shift ? pageSize : 1), sorted.length - 1));
-    if (key.upArrow) setCursor((c) => Math.max(c - (key.shift ? pageSize : 1), 0));
+    if (key.downArrow) setCursor((c) => Math.min(c + 1, sorted.length - 1));
+    if (key.upArrow) setCursor((c) => Math.max(c - 1, 0));
+
+    // Page navigation: < > and PageUp/PageDown
+    if (input === '<' || input === ',') setCursor((c) => Math.max(c - pageSize, 0));
+    if (input === '>' || input === '.') setCursor((c) => Math.min(c + pageSize, sorted.length - 1));
     if (key.pageDown) setCursor((c) => Math.min(c + pageSize, sorted.length - 1));
     if (key.pageUp) setCursor((c) => Math.max(c - pageSize, 0));
 
     // Horizontal
     if (key.rightArrow) setColOffset((c) => Math.min(c + 1, maxColOffset));
     if (key.leftArrow) setColOffset((c) => Math.max(c - 1, 0));
-
-    // Sort
-    if (input === 's' && !key.shift) {
-      setSortKey((prev) => {
-        const idx = SORT_CYCLE.indexOf(prev);
-        return SORT_CYCLE[(idx + 1) % SORT_CYCLE.length]!;
-      });
-    }
-    if (input === 'S' || (input === 's' && key.shift)) setSortAsc((prev) => !prev);
 
     // Preset
     if (input === 'p') {
@@ -165,14 +189,14 @@ export const EnhancedModelTable = ({
 
     // Select
     if (key.return && sorted[safeCursor]) onSelect(sorted[safeCursor]!);
-  }, { isActive: !filterActive && !modalOpen });
+  }, { isActive: !filterActive && !anyModalOpen });
 
   // Filtro texto: ESC/Enter sai
   useInput((_input, key) => {
     if (key.escape || key.return) { setFilterActive(false); setCursor(0); }
   }, { isActive: filterActive });
 
-  const sortLabel = availableCols.find((c) => c.key === sortKey)?.label ?? sortKey;
+  const sortLabel = availableCols.find((c) => c.key === effectiveSortKey)?.label ?? effectiveSortKey;
   const filterRules = parseFilterString(filter);
   const hasMetricF = filterRules.some((r) => r.type === 'metric');
   const hasTextF = filterRules.some((r) => r.type === 'text');
@@ -190,7 +214,7 @@ export const EnhancedModelTable = ({
                 <TextInput
                   value={filter}
                   onChange={(v) => { setFilter(v); setCursor(0); }}
-                  placeholder="$Intel>=40|gpt|$MMLU>=70..."
+                  placeholder="openai|google|$Intel>=40|$MMLU>=70..."
                   focus={true}
                 />
               </>
@@ -199,8 +223,8 @@ export const EnhancedModelTable = ({
                 <Text dimColor>Filtro:</Text>
                 {filter ? (
                   <Box gap={1}>
-                    {hasMetricF && <Text color="yellow">{filterRules.filter((r) => r.type === 'metric').map((r) => r.type === 'metric' ? `$${r.metric}${r.operator}${r.value}` : '').join('|')}</Text>}
-                    {hasMetricF && hasTextF && <Text dimColor>|</Text>}
+                    {hasMetricF && <Text color="yellow">{filterRules.filter((r) => r.type === 'metric').map((r) => r.type === 'metric' ? `$${r.metric}${r.operator}${r.value}` : '').join('&')}</Text>}
+                    {hasMetricF && hasTextF && <Text dimColor>+</Text>}
                     {hasTextF && <Text color="white">{filterRules.filter((r) => r.type === 'text').map((r) => r.value).join('|')}</Text>}
                   </Box>
                 ) : (
@@ -217,19 +241,40 @@ export const EnhancedModelTable = ({
       </Box>
 
       {/* ── Content ── */}
-      {modalOpen ? (
+      {filterModalOpen ? (
         <Box marginTop={1}>
           <FilterBuilderModal
             filterText={filter}
             maxHeight={maxRows}
-            onClose={(newText) => { setFilter(newText); setModalOpen(false); setCursor(0); }}
+            onClose={(newText) => { setFilter(newText); setFilterModalOpen(false); setCursor(0); }}
+          />
+        </Box>
+      ) : columnSelectorOpen ? (
+        <Box marginTop={1}>
+          <ColumnSelectorModal
+            visibleKeys={visibleMetrics}
+            onClose={(keys) => { setVisibleMetrics(keys); setColumnSelectorOpen(false); }}
+          />
+        </Box>
+      ) : sortSelectorOpen ? (
+        <Box marginTop={1}>
+          <SortSelectorModal
+            columns={sortableCols}
+            currentKey={effectiveSortKey}
+            ascending={sortAsc}
+            onSelect={(key, asc) => {
+              setSortKey(key);
+              setSortAsc(asc);
+              setSortSelectorOpen(false);
+            }}
+            onCancel={() => setSortSelectorOpen(false)}
           />
         </Box>
       ) : (
         <Box flexDirection="column" marginTop={1}>
           <Box>
             {visibleCols.map((col, i) => (
-              <Text key={col.key} dimColor bold={col.key === sortKey}>
+              <Text key={col.key} dimColor bold={col.key === effectiveSortKey}>
                 {i > 0 ? ' ' : ''}{col.align === 'left' ? pad(col.label, col.width) : padR(col.label, col.width)}
               </Text>
             ))}
@@ -261,51 +306,32 @@ export const EnhancedModelTable = ({
         </Box>
       )}
 
-      {/* ── Footer (sempre visivel) ── */}
-      <Box marginTop={1} flexDirection="column">
-        <Box gap={1}>
-          <Text color="cyan">{'\u2191\u2193'}</Text><Text dimColor>navegar</Text>
-          <Text color="cyan">Shift+{'\u2191\u2193'}</Text><Text dimColor>pagina</Text>
-          <Text color="cyan">{'\u2190\u2192'}</Text><Text dimColor>colunas</Text>
-          <Text color="green">s/S</Text><Text dimColor>ordenar</Text>
-          <Text color="green">f</Text><Text dimColor>filtro</Text>
-          <Text color="green">F</Text><Text dimColor>construtor</Text>
-          <Text color="green">p</Text><Text dimColor>preset</Text>
-          <Text color="white">Enter</Text><Text dimColor>selecionar</Text>
-          {onCancel && <><Text color="red">ESC</Text><Text dimColor>voltar</Text></>}
-          <Text dimColor>{sorted.length}/{models.length}</Text>
-        </Box>
-
-        <Box gap={1}>
-          <Text color="cyan" bold>Intel</Text><Text dimColor>Composto 0-100</Text>
-          <Text color="cyan" bold>Code</Text><Text dimColor>Codigo 0-100</Text>
-          <Text color="cyan" bold>Math</Text><Text dimColor>Mat 0-100</Text>
-          <Text dimColor>|</Text>
-          <Text color="yellow" bold>MMLU</Text><Text dimColor>Multi-dominio PhD</Text>
-          <Text color="yellow" bold>GPQA</Text><Text dimColor>Q&A PhD-level</Text>
-          <Text color="yellow" bold>HLE</Text><Text dimColor>Frontier reasoning</Text>
-        </Box>
-
-        <Box gap={1}>
-          <Text color="green" bold>LCB</Text><Text dimColor>Codigo competitivo</Text>
-          <Text color="green" bold>Sci</Text><Text dimColor>Python cientifico</Text>
-          <Text dimColor>|</Text>
-          <Text color="magenta" bold>M500</Text><Text dimColor>Mat competicao</Text>
-          <Text color="magenta" bold>AIME</Text><Text dimColor>Olimpiada 2025</Text>
-          <Text dimColor>|</Text>
-          <Text color="blue" bold>Tok/s</Text><Text dimColor>Velocidade</Text>
-          <Text color="blue" bold>TTFT</Text><Text dimColor>Latencia</Text>
-          <Text dimColor>|</Text>
-          <Text color="white" bold>I/$</Text><Text dimColor>Intel/preco</Text>
-        </Box>
-
-        {(colOffset > 0 || colOffset < maxColOffset) && (
-          <Box gap={2}>
-            {colOffset > 0 && <Text color="yellow">{'\u25C0'} colunas a esquerda</Text>}
-            {colOffset < maxColOffset && <Text color="yellow">colunas a direita {'\u25B6'}</Text>}
+      {/* ── Footer (hidden during filter/modal modes) ── */}
+      {!filterActive && !anyModalOpen && (
+        <Box marginTop={1} flexDirection="column">
+          <Box gap={1} flexWrap="wrap">
+            <Text color="cyan">{'\u2191\u2193'}</Text><Text dimColor>navegar</Text>
+            <Text color="cyan">{'<>'}</Text><Text dimColor>pagina</Text>
+            <Text color="cyan">{'\u2190\u2192'}</Text><Text dimColor>colunas</Text>
+            <Text color="green">s</Text><Text dimColor>ordenar</Text>
+            <Text color="green">S</Text><Text dimColor>direcao</Text>
+            <Text color="green">c</Text><Text dimColor>metricas</Text>
+            <Text color="green">f</Text><Text dimColor>filtro</Text>
+            <Text color="green">F</Text><Text dimColor>construtor</Text>
+            <Text color="green">p</Text><Text dimColor>preset</Text>
+            <Text color="white">Enter</Text><Text dimColor>selecionar</Text>
+            {onCancel && <><Text color="red">ESC</Text><Text dimColor>voltar</Text></>}
+            <Text dimColor>{sorted.length}/{models.length}</Text>
           </Box>
-        )}
-      </Box>
+
+          {(colOffset > 0 || colOffset < maxColOffset) && (
+            <Box gap={2}>
+              {colOffset > 0 && <Text color="yellow">{'\u25C0'} colunas a esquerda</Text>}
+              {colOffset < maxColOffset && <Text color="yellow">colunas a direita {'\u25B6'}</Text>}
+            </Box>
+          )}
+        </Box>
+      )}
     </Box>
   );
 };

@@ -9,6 +9,16 @@ export interface StepTypeItem {
   readonly label: string;
   readonly value: StepType;
   readonly description: string;
+  /** Explicacao detalhada para tutorial/help */
+  readonly helpText: string;
+  /** Icone para identificacao visual */
+  readonly icon: string;
+  /** Cor associada ao tipo */
+  readonly color: string;
+  /** Variaveis que esse step pode LER */
+  readonly canRead: string;
+  /** Variaveis que esse step pode ESCREVER */
+  readonly canWrite: string;
 }
 
 export interface StepFieldDef {
@@ -29,19 +39,95 @@ export interface VariableUsage {
 }
 
 export const STEP_TYPE_ITEMS: readonly StepTypeItem[] = [
-  { label: 'Pi Agent', value: 'pi_agent', description: 'Executa agente IA no worktree' },
-  { label: 'LangChain Prompt', value: 'langchain_prompt', description: 'Gera/refina texto via LLM' },
-  { label: 'Condition', value: 'condition', description: 'Avalia expressao e bifurca' },
-  { label: 'Goto', value: 'goto', description: 'Salto incondicional' },
-  { label: 'Set Variable', value: 'set_variable', description: 'Define variavel' },
-  { label: 'Git Diff', value: 'git_diff', description: 'Captura diff do worktree' },
-  { label: 'Fail', value: 'fail', description: 'Encerra com erro de negocio' },
+  {
+    label: 'Pi Agent',
+    value: 'pi_agent',
+    description: 'Executa agente IA no worktree',
+    icon: '\u{1F916}',
+    color: 'green',
+    helpText: 'Executa o Pi Coding Agent no worktree isolado do worker. O agente recebe o taskTemplate com variaveis resolvidas e pode criar/editar arquivos, rodar comandos e fazer commits. NAO consegue criar ou modificar variaveis do pipeline — opera apenas no filesystem.',
+    canRead: '$task, $diff, $error, $custom_* (via template)',
+    canWrite: 'Nenhuma variavel. Altera apenas arquivos no worktree.',
+  },
+  {
+    label: 'LangChain Prompt',
+    value: 'langchain_prompt',
+    description: 'Gera/refina texto via LLM',
+    icon: '\u{1F4AC}',
+    color: 'magenta',
+    helpText: 'Envia um prompt ao LLM (via ChatOpenAI + OpenRouter) e armazena a resposta em uma variavel. Ideal para reformular tasks, gerar resumos ou tomar decisoes textuais. A resposta e salva na variavel indicada em outputTarget.',
+    canRead: '$task, $diff, $error, $custom_* (via inputTemplate)',
+    canWrite: 'A variavel definida em outputTarget (ex: $task, $custom_summary).',
+  },
+  {
+    label: 'Condition',
+    value: 'condition',
+    description: 'Avalia expressao e bifurca execucao',
+    icon: '\u{1F500}',
+    color: 'yellow',
+    helpText: 'Avalia uma expressao simples e escolhe o proximo step. Operadores: ==, !=, >=, <=, >, <. O lado esquerdo deve ser uma $variavel, o lado direito um valor literal. Exemplo: $custom_tries >= 3.',
+    canRead: 'A variavel na expressao (ex: $custom_tries)',
+    canWrite: 'Nenhuma. Apenas decide o caminho.',
+  },
+  {
+    label: 'Goto',
+    value: 'goto',
+    description: 'Salto incondicional para outro step',
+    icon: '\u{27A1}',
+    color: 'cyan',
+    helpText: 'Move o cursor de execucao para outro step ou para __end__ (encerra com sucesso). Util para criar loops ou pular para o final. Cuidado: loops sem condicao de saida atingem o maxStepExecutions.',
+    canRead: 'Nenhuma.',
+    canWrite: 'Nenhuma. Apenas redireciona o fluxo.',
+  },
+  {
+    label: 'Set Variable',
+    value: 'set_variable',
+    description: 'Define ou atualiza uma variavel do pipeline',
+    icon: '\u{1F4DD}',
+    color: 'blue',
+    helpText: 'Define o valor de uma variavel. Use "value" para valor literal (numero, texto, boolean) OU "valueExpression" para expressao aritmetica ($custom_tries + 1). Apenas UM dos dois pode ser usado por vez.',
+    canRead: 'A variavel na valueExpression (ex: $custom_tries)',
+    canWrite: 'A variavel definida em target (ex: $custom_tries, $task).',
+  },
+  {
+    label: 'Git Diff',
+    value: 'git_diff',
+    description: 'Captura diff atual do worktree em variavel',
+    icon: '\u{1F4CB}',
+    color: 'white',
+    helpText: 'Executa git diff no worktree do worker e armazena o resultado na variavel indicada. Normalmente usado para capturar $diff antes de uma condicao ou langchain_prompt que analise as mudancas.',
+    canRead: 'Nenhuma.',
+    canWrite: 'A variavel definida em target (normalmente $diff).',
+  },
+  {
+    label: 'Fail',
+    value: 'fail',
+    description: 'Encerra pipeline com erro explicito',
+    icon: '\u{1F6D1}',
+    color: 'red',
+    helpText: 'Encerra a pipeline imediatamente com uma mensagem de erro. Representa falha de NEGOCIO (nao erro tecnico). A mensagem pode incluir $variaveis para contexto. O worker sera marcado como falho no resultado do DAG.',
+    canRead: '$task, $diff, $error, $custom_* (via messageTemplate)',
+    canWrite: 'Nenhuma. Encerra a execucao.',
+  },
 ];
 
 export const VARIABLE_DOCS = {
   reserved: '$task, $diff, $error',
   custom: '$custom_*',
 } as const;
+
+/**
+ * Busca metadados de um step type pelo valor.
+ *
+ * @param type - Tipo do step
+ * @returns Item com label, icon, color e helpText
+ *
+ * @example
+ * const info = findStepTypeInfo('pi_agent');
+ */
+export function findStepTypeInfo(type: StepType): StepTypeItem | undefined {
+  return STEP_TYPE_ITEMS.find((item) => item.value === type);
+}
 
 /**
  * Retorna campos editaveis para cada tipo de step.

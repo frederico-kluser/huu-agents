@@ -1,18 +1,26 @@
 /**
  * Tabela avancada de modelos LLM com:
- * - Scroll horizontal (h/l ou setas) para ver todas as colunas
+ * - Filtros compostos via pipe `|` (ex: `$Intel>=40|$MMLU>=20|gpt`)
+ * - Modal visual de filtros compostos (F maiusculo)
+ * - Scroll horizontal (setas esquerda/direita) e vertical (setas cima/baixo)
+ * - Shift+setas para page up/down
  * - Ordenacao por qualquer coluna (s para ciclar, S para inverter)
- * - Filtros por texto, benchmark minimo, custo-beneficio
- * - Dados de benchmark da Artificial Analysis quando disponiveis
+ * - Footer com 3 linhas de legendas de benchmarks
+ * - Header e footer sempre visiveis, tabela com altura variavel
  *
  * @module
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
 import TextInput from 'ink-text-input';
 import type { EnrichedModel } from '../data/enriched-model.js';
 import { formatPrice, formatContext } from '../data/models.js';
+import {
+  applyCompositeFilter,
+  parseCompositeFilter,
+  serializeSegments,
+} from './composite-filter.js';
 
 // ── Column definitions ──────────────────────────────────────────────
 
@@ -203,20 +211,6 @@ const SORT_CYCLE: readonly SortKey[] = [
   'tokensPerSec', 'mmluPro', 'gpqa', 'hle', 'livecodebench', 'context',
 ];
 
-// ── Filter modes ────────────────────────────────────────────────────
-
-type FilterMode = 'none' | 'has-benchmarks' | 'high-intel' | 'best-value' | 'fast';
-
-const FILTER_LABELS: Record<FilterMode, string> = {
-  'none': 'Todos',
-  'has-benchmarks': 'Com benchmarks',
-  'high-intel': 'Intel >= 40',
-  'best-value': 'I/$ >= 20',
-  'fast': '> 80 tok/s',
-};
-
-const FILTER_CYCLE: readonly FilterMode[] = ['none', 'has-benchmarks', 'high-intel', 'best-value', 'fast'];
-
 // ── Helpers ─────────────────────────────────────────────────────────
 
 const pad = (str: string, len: number): string =>
@@ -225,7 +219,16 @@ const pad = (str: string, len: number): string =>
 const padR = (str: string, len: number): string =>
   str.length >= len ? str.slice(0, len) : ' '.repeat(len - str.length) + str;
 
-const HEADER_LINES = 8;
+// Header (border + title + filter bar + gap) = ~6 lines
+// Footer (3 legend lines + keybindings + scroll indicators) = ~7 lines
+// Table header (col labels + separator) = 2 lines
+// Padding = 2 lines
+const FIXED_CHROME_LINES = 17;
+const PAGE_SIZE = 10;
+
+// ── UI mode ─────────────────────────────────────────────────────────
+
+type UIMode = 'navigate' | 'filter-text' | 'filter-modal';
 
 // ── Props ───────────────────────────────────────────────────────────
 
@@ -239,16 +242,18 @@ interface EnhancedModelTableProps {
 }
 
 /**
- * Tabela avancada de selecao de modelos com scroll horizontal,
- * ordenacao multi-criterio, filtros de benchmark e dados AA.
+ * Tabela avancada de selecao de modelos com filtros compostos,
+ * scroll horizontal/vertical, ordenacao e legendas de benchmarks.
  *
  * Keybindings:
- * - j/k ou setas: navegar verticalmente
- * - h/l ou Shift+setas: scroll horizontal (colunas)
- * - s: ciclar ordenacao (preco, intel, code, math, custo-beneficio, velocidade)
- * - S (shift+s): inverter direcao da ordenacao
- * - f: ativar filtro de texto (ESC/Enter para sair)
- * - p: ciclar filtro preset (todos, com benchmarks, high intel, best value, fast)
+ * - Setas cima/baixo: navegar verticalmente
+ * - Shift+setas cima/baixo: page up/down
+ * - Setas esquerda/direita: scroll horizontal (colunas)
+ * - s: ciclar ordenacao
+ * - S: inverter direcao da ordenacao
+ * - f: ativar filtro de texto composto (suporta `$Metric>=val|texto`)
+ * - F: abrir modal visual de filtros compostos
+ * - p: ciclar filtro preset
  * - Enter: selecionar modelo
  *
  * @example
@@ -264,15 +269,20 @@ export const EnhancedModelTable = ({
   onCancel,
 }: EnhancedModelTableProps) => {
   const [filter, setFilter] = useState('');
-  const [filterActive, setFilterActive] = useState(false);
+  const [uiMode, setUIMode] = useState<UIMode>('navigate');
   const [cursor, setCursor] = useState(0);
   const [colOffset, setColOffset] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>('inputPrice');
   const [sortAsc, setSortAsc] = useState(true);
-  const [filterMode, setFilterMode] = useState<FilterMode>('none');
+  // Modal: input de novo segmento
+  const [modalInput, setModalInput] = useState('');
+  // Modal: cursor de selecao de regras existentes
+  const [modalCursor, setModalCursor] = useState(0);
+
   const { stdout } = useStdout();
   const termCols = stdout?.columns ?? 120;
-  const maxRows = Math.max(3, (stdout?.rows ?? 24) - HEADER_LINES);
+  const termRows = stdout?.rows ?? 24;
+  const maxRows = Math.max(3, termRows - FIXED_CHROME_LINES);
 
   // Colunas visiveis: base sempre + benchmark/speed apenas com AA data
   const availableCols = useMemo(() =>
@@ -294,46 +304,13 @@ export const EnhancedModelTable = ({
 
   const maxColOffset = Math.max(0, availableCols.length - visibleCols.length);
 
-  // Filtrar por texto + preset
-  const filtered = useMemo(() => {
-    let result = [...models];
+  // Segmentos parseados do filtro atual (para o modal)
+  const filterSegments = useMemo(() => parseCompositeFilter(filter), [filter]);
 
-    // Filtro de texto
-    if (filter.trim()) {
-      const q = filter.toLowerCase();
-      result = result.filter(
-        (m) =>
-          m.name.toLowerCase().includes(q) ||
-          m.provider.toLowerCase().includes(q) ||
-          m.id.toLowerCase().includes(q) ||
-          m.tokenizer.toLowerCase().includes(q) ||
-          (m.aa.creatorSlug?.toLowerCase().includes(q) ?? false),
-      );
-    }
-
-    // Filtro preset
-    switch (filterMode) {
-      case 'has-benchmarks':
-        result = result.filter((m) => m.aa.matched);
-        break;
-      case 'high-intel':
-        result = result.filter((m) => (m.aa.benchmarks.intelligenceIndex ?? 0) >= 40);
-        break;
-      case 'best-value': {
-        result = result.filter((m) => {
-          const intel = m.aa.benchmarks.intelligenceIndex;
-          const price = m.aa.pricing.blended3to1 ?? (m.inputPrice * 0.75 + m.outputPrice * 0.25);
-          return intel !== null && price > 0 && intel / price >= 20;
-        });
-        break;
-      }
-      case 'fast':
-        result = result.filter((m) => (m.aa.speed.outputTokensPerSecond ?? 0) > 80);
-        break;
-    }
-
-    return result;
-  }, [models, filter, filterMode]);
+  // Aplicar filtro composto
+  const filtered = useMemo(() =>
+    applyCompositeFilter(models, filter),
+  [models, filter]);
 
   // Ordenar
   const sorted = useMemo(() => {
@@ -342,7 +319,6 @@ export const EnhancedModelTable = ({
     return [...filtered].sort((a, b) => {
       const va = col.getValue(a);
       const vb = col.getValue(b);
-      // Nulls always go to the end
       if (va === null && vb === null) return 0;
       if (va === null) return 1;
       if (vb === null) return -1;
@@ -355,33 +331,59 @@ export const EnhancedModelTable = ({
   const scrollOffset = Math.max(0, safeCursor - maxRows + 1);
   const visible = sorted.slice(scrollOffset, scrollOffset + maxRows);
 
-  // Navigation mode: keys control table (active when filter is NOT focused)
+  // ── Modal helpers ──
+  const addSegmentFromModal = useCallback(() => {
+    const trimmed = modalInput.trim();
+    if (!trimmed) return;
+    const newFilter = filter ? `${filter}|${trimmed}` : trimmed;
+    setFilter(newFilter);
+    setModalInput('');
+  }, [modalInput, filter]);
+
+  const removeSegmentAtIndex = useCallback((idx: number) => {
+    const segs = parseCompositeFilter(filter);
+    const newSegs = segs.filter((_, i) => i !== idx);
+    setFilter(serializeSegments(newSegs));
+    setModalCursor((c) => Math.min(c, Math.max(0, newSegs.length - 1)));
+  }, [filter]);
+
+  // ── Navigation mode ──
   useInput((input, key) => {
-    // ESC to cancel
-    if (key.escape && onCancel) {
-      onCancel();
+    if (key.escape) {
+      if (onCancel) onCancel();
       return;
     }
 
-    // f activates filter text input
-    if (input === 'f') {
-      setFilterActive(true);
+    // f: ativar filtro texto
+    if (input === 'f' && !key.shift) {
+      setUIMode('filter-text');
+      return;
+    }
+    // F: abrir modal visual
+    if (input === 'F' || (input === 'f' && key.shift)) {
+      setUIMode('filter-modal');
+      setModalInput('');
+      setModalCursor(0);
       return;
     }
 
-    // Vertical navigation
-    if (input === 'j' || key.downArrow) {
+    // Vertical navigation (setas)
+    if (key.downArrow && key.shift) {
+      setCursor((c) => Math.min(c + PAGE_SIZE, sorted.length - 1));
+    } else if (key.downArrow) {
       setCursor((c) => Math.min(c + 1, sorted.length - 1));
     }
-    if (input === 'k' || key.upArrow) {
+    if (key.upArrow && key.shift) {
+      setCursor((c) => Math.max(c - PAGE_SIZE, 0));
+    } else if (key.upArrow) {
       setCursor((c) => Math.max(c - 1, 0));
     }
 
-    // Horizontal scroll
-    if (input === 'l' || (key.rightArrow && key.shift)) {
+    // Horizontal scroll (setas esquerda/direita)
+    if (key.rightArrow) {
       setColOffset((c) => Math.min(c + 1, maxColOffset));
     }
-    if (input === 'h' || (key.leftArrow && key.shift)) {
+    if (key.leftArrow) {
       setColOffset((c) => Math.max(c - 1, 0));
     }
 
@@ -396,31 +398,48 @@ export const EnhancedModelTable = ({
       setSortAsc((prev) => !prev);
     }
 
-    // Filter preset cycling
-    if (input === 'p') {
-      setFilterMode((prev) => {
-        const idx = FILTER_CYCLE.indexOf(prev);
-        return FILTER_CYCLE[(idx + 1) % FILTER_CYCLE.length]!;
-      });
-      setCursor(0);
-    }
-
     // Select
     if (key.return && sorted[safeCursor]) {
       onSelect(sorted[safeCursor]!);
     }
-  }, { isActive: !filterActive });
+  }, { isActive: uiMode === 'navigate' });
 
-  // Filter input mode: ESC or Enter exits filter
+  // ── Filter text input mode ──
   useInput((_input, key) => {
     if (key.escape || key.return) {
-      setFilterActive(false);
+      setUIMode('navigate');
       setCursor(0);
     }
-  }, { isActive: filterActive });
+  }, { isActive: uiMode === 'filter-text' });
+
+  // ── Filter modal mode ──
+  useInput((input, key) => {
+    if (key.escape) {
+      setUIMode('navigate');
+      return;
+    }
+    // Enter: adicionar novo segmento
+    if (key.return) {
+      addSegmentFromModal();
+      return;
+    }
+    // d ou Delete/Backspace (sem input no campo): remover segmento selecionado
+    if (input === 'd' && filterSegments.length > 0) {
+      removeSegmentAtIndex(modalCursor);
+      return;
+    }
+    // Navegar entre regras existentes
+    if (key.downArrow) {
+      setModalCursor((c) => Math.min(c + 1, filterSegments.length - 1));
+    }
+    if (key.upArrow) {
+      setModalCursor((c) => Math.max(c - 1, 0));
+    }
+  }, { isActive: uiMode === 'filter-modal' });
 
   const sortLabel = availableCols.find((c) => c.key === sortKey)?.label ?? sortKey;
 
+  // ── Render ──
   return (
     <Box flexDirection="column" padding={1}>
       {/* Header com filtro e info */}
@@ -428,81 +447,182 @@ export const EnhancedModelTable = ({
         {title && <Text bold color="cyan">{title}</Text>}
         <Box marginTop={1} gap={2}>
           <Box>
-            {filterActive ? (
+            {uiMode === 'filter-text' ? (
               <>
                 <Text color="green" bold>Filtro: </Text>
                 <TextInput
                   value={filter}
                   onChange={(v) => { setFilter(v); setCursor(0); }}
-                  placeholder="nome, provider, id..."
+                  placeholder="$Intel>=40|gpt|$MMLU>=20..."
                   focus={true}
                 />
               </>
             ) : (
-              <Text dimColor>Filtro: {filter || '(f para digitar)'}</Text>
+              <Text dimColor>
+                Filtro: {filter || '(f para digitar, F para visual)'}
+              </Text>
             )}
           </Box>
           <Text dimColor>|</Text>
           <Text color="yellow">Sort: {sortLabel} {sortAsc ? '\u2191' : '\u2193'}</Text>
           <Text dimColor>|</Text>
-          <Text color="magenta">P: {FILTER_LABELS[filterMode]}</Text>
+          <Text color="magenta">{sorted.length}/{models.length}</Text>
         </Box>
       </Box>
 
-      {/* Table */}
-      <Box flexDirection="column" marginTop={1}>
-        {/* Header row */}
-        <Box>
-          {visibleCols.map((col, i) => (
-            <Text key={col.key} dimColor bold={col.key === sortKey}>
-              {i > 0 ? ' ' : ''}
-              {col.align === 'left' ? pad(col.label, col.width) : padR(col.label, col.width)}
+      {/* Filter modal overlay */}
+      {uiMode === 'filter-modal' && (
+        <Box
+          borderStyle="bold"
+          borderColor="magenta"
+          flexDirection="column"
+          paddingX={2}
+          paddingY={1}
+          marginTop={1}
+        >
+          <Text bold color="magenta">Filtros Compostos (visual)</Text>
+          <Text dimColor>Segmentos combinados com OR (uniao). Use $ para metricas.</Text>
+          <Box marginTop={1} flexDirection="column">
+            {filterSegments.length === 0 && (
+              <Text dimColor italic>Nenhum filtro ativo</Text>
+            )}
+            {filterSegments.map((seg, i) => (
+              <Box key={`${seg.raw}-${i}`} gap={1}>
+                <Text color={i === modalCursor ? 'cyan' : undefined} bold={i === modalCursor}>
+                  {i === modalCursor ? '\u25B8 ' : '  '}
+                  {seg.type === 'metric'
+                    ? <Text color="yellow">${seg.metricKey}{seg.op}{seg.value}</Text>
+                    : <Text color="green">{seg.query}</Text>}
+                </Text>
+                {i === modalCursor && (
+                  <Text dimColor>(d para remover)</Text>
+                )}
+              </Box>
+            ))}
+          </Box>
+          <Box marginTop={1} gap={1}>
+            <Text color="cyan" bold>+ </Text>
+            <TextInput
+              value={modalInput}
+              onChange={setModalInput}
+              placeholder="$Intel>=40 ou gpt..."
+              focus={uiMode === 'filter-modal'}
+            />
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>
+              Enter:adicionar  d:remover selecionado  ESC:fechar
             </Text>
-          ))}
+          </Box>
+          <Box>
+            <Text dimColor>
+              Metricas: </Text>
+            <Text color="yellow" dimColor>
+              $intel $code $math $mmlu $gpqa $hle $lcb $sci $m500 $aime $tok/s $ttft $price $i/$
+            </Text>
+          </Box>
+          <Box>
+            <Text dimColor>
+              Operadores: </Text>
+            <Text color="cyan" dimColor>
+              {'>'}= {'<'}= {'>'} {'<'} == !=
+            </Text>
+          </Box>
         </Box>
-        <Text dimColor>{'─'.repeat(Math.min(termCols - 4, visibleCols.reduce((s, c) => s + c.width + 1, -1)))}</Text>
+      )}
 
-        {/* Data rows */}
-        {visible.map((m, i) => {
-          const idx = scrollOffset + i;
-          const active = idx === safeCursor;
-          return (
-            <Box key={m.id}>
-              {visibleCols.map((col, ci) => {
-                const val = col.format(m);
-                const colColor = active ? 'black' : col.color?.(m);
-                const formatted = col.align === 'left' ? pad(val, col.width) : padR(val, col.width);
-                return (
-                  <Text
-                    key={col.key}
-                    backgroundColor={active ? 'cyan' : undefined}
-                    color={colColor}
-                    dimColor={!active && !colColor}
-                  >
-                    {ci > 0 ? ' ' : ''}{formatted}
-                  </Text>
-                );
-              })}
-              {active && <Text> {'<'}</Text>}
-            </Box>
-          );
-        })}
+      {/* Table (so aparece se nao esta no modal) */}
+      {uiMode !== 'filter-modal' && (
+        <Box flexDirection="column" marginTop={1}>
+          {/* Header row */}
+          <Box>
+            {visibleCols.map((col, i) => (
+              <Text key={col.key} dimColor bold={col.key === sortKey}>
+                {i > 0 ? ' ' : ''}
+                {col.align === 'left' ? pad(col.label, col.width) : padR(col.label, col.width)}
+              </Text>
+            ))}
+          </Box>
+          <Text dimColor>{'─'.repeat(Math.min(termCols - 4, visibleCols.reduce((s, c) => s + c.width + 1, -1)))}</Text>
 
-        {sorted.length === 0 && (
-          <Text dimColor>Nenhum modelo encontrado</Text>
-        )}
-      </Box>
+          {/* Data rows */}
+          {visible.map((m, i) => {
+            const idx = scrollOffset + i;
+            const active = idx === safeCursor;
+            return (
+              <Box key={m.id}>
+                {visibleCols.map((col, ci) => {
+                  const val = col.format(m);
+                  const colColor = active ? 'black' : col.color?.(m);
+                  const formatted = col.align === 'left' ? pad(val, col.width) : padR(val, col.width);
+                  return (
+                    <Text
+                      key={col.key}
+                      backgroundColor={active ? 'cyan' : undefined}
+                      color={colColor}
+                      dimColor={!active && !colColor}
+                    >
+                      {ci > 0 ? ' ' : ''}{formatted}
+                    </Text>
+                  );
+                })}
+                {active && <Text> {'<'}</Text>}
+              </Box>
+            );
+          })}
 
-      {/* Footer */}
+          {sorted.length === 0 && (
+            <Text dimColor>Nenhum modelo encontrado</Text>
+          )}
+        </Box>
+      )}
+
+      {/* Footer — sempre visivel (3 linhas de legendas + keybindings) */}
       <Box marginTop={1} flexDirection="column">
-        <Text dimColor>
-          j/k:navegar  h/l:scroll cols  s:ordenar  S:inverter  f:filtro texto  p:preset  Enter:selecionar  {onCancel ? 'ESC:voltar  ' : ''}{sorted.length}/{models.length}
-        </Text>
-        {colOffset > 0 && (
-          <Text dimColor color="yellow">{'<'} mais colunas a esquerda</Text>
-        )}
-        {colOffset < maxColOffset && (
-          <Text dimColor color="yellow">{'>'} mais colunas a direita (h/l para scroll)</Text>
+        {/* Linha 1: Keybindings */}
+        <Box gap={1}>
+          <Text color="cyan">{'\u2191\u2193'}:navegar</Text>
+          <Text color="cyan">Shift+{'\u2191\u2193'}:pagina</Text>
+          <Text color="cyan">{'\u2190\u2192'}:scroll cols</Text>
+          <Text color="yellow">s:ordenar</Text>
+          <Text color="yellow">S:inverter</Text>
+          <Text color="green">f:filtro</Text>
+          <Text color="magenta">F:visual</Text>
+          <Text dimColor>Enter:selecionar</Text>
+          {onCancel && <Text dimColor>ESC:voltar</Text>}
+        </Box>
+
+        {/* Linha 2: Legendas benchmarks (indices e qualidade) */}
+        <Box gap={1}>
+          <Text color="blue" bold>Benchmarks:</Text>
+          <Text color="yellow">Intel</Text><Text dimColor>=Indice Inteligencia(0-100)</Text>
+          <Text color="yellow">Code</Text><Text dimColor>=Codigo</Text>
+          <Text color="yellow">Math</Text><Text dimColor>=Matematica</Text>
+          <Text color="yellow">MMLU</Text><Text dimColor>=Conhecimento multi-dominio</Text>
+          <Text color="yellow">GPQA</Text><Text dimColor>=Raciocinio PhD</Text>
+        </Box>
+
+        {/* Linha 3: Legendas benchmarks (avancados + speed + custo) */}
+        <Box gap={1}>
+          <Text color="yellow">HLE</Text><Text dimColor>=Frontier reasoning</Text>
+          <Text color="yellow">LCB</Text><Text dimColor>=Codigo competitivo</Text>
+          <Text color="yellow">Sci</Text><Text dimColor>=Codigo cientifico</Text>
+          <Text color="yellow">M500</Text><Text dimColor>=Matematica competicao</Text>
+          <Text color="yellow">AIME</Text><Text dimColor>=Olimpiada matematica</Text>
+          <Text color="green">Tok/s</Text><Text dimColor>=Velocidade</Text>
+          <Text color="green">I/$</Text><Text dimColor>=Custo-beneficio</Text>
+        </Box>
+
+        {/* Indicadores de scroll horizontal */}
+        {(colOffset > 0 || colOffset < maxColOffset) && (
+          <Box gap={2}>
+            {colOffset > 0 && (
+              <Text color="yellow">{'\u2190'} mais colunas a esquerda</Text>
+            )}
+            {colOffset < maxColOffset && (
+              <Text color="yellow">{'\u2192'} mais colunas a direita</Text>
+            )}
+          </Box>
         )}
       </Box>
     </Box>

@@ -40,6 +40,7 @@ src/
 │   ├── options-screen.tsx           # [o] Opcoes: modelos individuais + criar pipelines
 │   ├── profile-select-screen.tsx    # Seleção de perfil antes da execução
 │   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis (via opcoes)
+│   ├── auto-pipeline-screen.tsx     # Criação automática de pipelines via LLM
 │   ├── dag-view-screen.tsx          # Visualização do DAG
 │   ├── execution-screen.tsx         # Dashboard de execução real-time
 │   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
@@ -65,13 +66,14 @@ src/
 │       ├── control-handlers.ts      # condition, goto, set_variable, fail
 │       └── git-diff-handler.ts      # git_diff (captura diff do worktree)
 ├── services/
-│   └── profile-catalog.ts           # Persistência de perfis (global + local, Result<T>)
+│   ├── profile-catalog.ts           # Persistência de perfis (global + local, Result<T>)
+│   └── auto-pipeline.ts             # Geração automática de pipelines via LangChain
 ├── git/                             # git-wrapper, worktree-manager, conflict-resolver
 ├── hooks/                           # use-config, use-file-tree, use-api-validation, use-elapsed-time
 └── utils/                           # file-tree, path-guard
 ```
 
-55 arquivos, ~7.000 LOC (~127 LOC/arquivo).
+57 arquivos, ~7.500 LOC (~132 LOC/arquivo).
 
 ## Worker Pipeline Profiles
 
@@ -87,7 +89,9 @@ Perfis definem pipelines multi-step dentro de cada worker. O DAG permanece como 
 
 **Schema do perfil:** `id` em kebab-case como label principal, `seats` (1-16) para limitar concorrência por perfil e `initialVariables` para seed de variáveis `custom_*`.
 
-**Atalho [o] opcoes:** acessível de qualquer tela (exceto config/loading/executing). Permite trocar modelo planner ou worker individualmente (catálogo completo de 18 modelos) e criar pipeline profiles. Legenda `[o] opcoes` aparece no rodapé de cada tela.
+**Atalho [o] opcoes:** acessível de qualquer tela (exceto config/loading/executing). Permite trocar modelo planner ou worker individualmente (catálogo completo de 18 modelos), criar pipeline profiles manualmente, e criar pipelines automaticamente via LLM (Auto-Pipeline). Legenda `[o] opcoes` aparece no rodapé de cada tela.
+
+**Auto-Pipeline:** modo de criação automática de pipelines via LangChain. Duas chamadas LLM: (1) gera steps + variáveis a partir de descrição em linguagem natural, (2) gera id + descrição. Modelo padrão: `deepseek/deepseek-chat` (trocável). Usuário só escolhe escopo (global/project) e seats (1-16). Validação Zod + integridade referencial antes de salvar.
 
 **Validação:** Zod `superRefine` (entryStepId, set_variable XOR, step IDs duplicados, namespace de initialVariables) + `validateProfileReferences()` (integridade referencial de targets)
 

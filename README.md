@@ -185,9 +185,30 @@ Atalho `[o]` abre a tela de opcoes de qualquer tela (exceto config inicial, load
 A tela de opcoes permite:
 - **Modelo Planner** — selecao individual do catalogo completo de 18 modelos
 - **Modelo Worker** — selecao individual do catalogo completo de 18 modelos
-- **Criar Pipeline Profile** — wizard visual para montar perfis multi-step
+- **Auto-Pipeline (criar com IA)** — descreva o que quer em linguagem natural e a IA cria a pipeline automaticamente
+- **Criar Pipeline Profile (manual)** — wizard visual para montar perfis multi-step
 
 Ao trocar modelo, a mudanca e salva imediatamente e o usuario permanece na tela de opcoes — pode trocar um ou ambos sem sair. Ao criar perfil, o wizard valida referencias antes de salvar.
+
+### Auto-Pipeline
+
+O modo Auto-Pipeline permite criar Worker Pipeline Profiles usando linguagem natural. O usuario descreve o que deseja (ex: "escreva testes e corrija o codigo ate passar") e a IA gera automaticamente todos os steps, variaveis, id e descricao.
+
+**Fluxo:**
+1. Usuario descreve o pipeline desejado em linguagem natural
+2. Escolhe escopo (global/project) e numero de instancias paralelas (seats)
+3. Opcionalmente troca o modelo LLM (padrao: DeepSeek V3.2)
+4. Duas chamadas LLM sao feitas:
+   - Primeira: interpreta a descricao e gera os steps + variaveis + entryStepId
+   - Segunda: gera id (kebab-case) e descricao a partir dos steps gerados
+5. Resultado e validado com Zod + integridade referencial
+6. Usuario confirma e salva
+
+**O que o usuario NAO precisa escolher:** id, descricao, steps, variaveis, entryStepId, maxStepExecutions — tudo e gerado automaticamente.
+
+**O que o usuario escolhe:** escopo (global/project), seats (1-16), e opcionalmente o modelo LLM.
+
+**Modelo padrao:** `deepseek/deepseek-chat` (DeepSeek V3.2) — trocavel para qualquer modelo do catalogo de 18 modelos.
 
 ### Selecao de modelos
 
@@ -232,6 +253,7 @@ src/
 │   ├── options-screen.tsx           # [o] Opcoes: modelos individuais + criar pipelines
 │   ├── profile-select-screen.tsx    # Selecao de perfil antes da execucao
 │   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis (via opcoes)
+│   ├── auto-pipeline-screen.tsx     # Criacao automatica de pipelines via LLM
 │   ├── dag-view-screen.tsx          # Visualizacao do DAG
 │   ├── execution-screen.tsx         # Dashboard de execucao real-time
 │   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
@@ -265,7 +287,8 @@ src/
 │       ├── control-handlers.ts      # condition, goto, set_variable, fail
 │       └── git-diff-handler.ts      # git_diff (captura diff do worktree)
 ├── services/
-│   └── profile-catalog.ts           # Persistencia de perfis (global + local, Result<T>)
+│   ├── profile-catalog.ts           # Persistencia de perfis (global + local, Result<T>)
+│   └── auto-pipeline.ts             # Geracao automatica de pipelines via LangChain
 ├── git/
 │   ├── git-types.ts                 # Tipos Result, GitError, CommitHash
 │   ├── git-wrapper.ts               # Operacoes Git atomicas (execFile)
@@ -282,7 +305,7 @@ src/
     └── path-guard.ts                # Protecao contra path traversal
 ```
 
-55 arquivos, ~7.000 LOC (media ~127 LOC/arquivo).
+57 arquivos, ~7.500 LOC (media ~132 LOC/arquivo).
 
 ## Padroes de codigo
 

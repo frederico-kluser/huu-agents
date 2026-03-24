@@ -166,12 +166,17 @@ const matchesMetric = (m: EnrichedModel, rule: MetricFilterRule): boolean => {
 };
 
 /**
- * Aplica regras de filtro como UNION (OR).
- * Cada regra filtra independentemente; resultados sao mesclados sem duplicatas.
+ * Aplica regras de filtro com semantica hibrida:
+ * - Filtros de texto: OR (qualquer texto deve corresponder)
+ * - Filtros de metrica: AND (todos devem ser satisfeitos)
+ * - Ambos os grupos sao AND entre si
+ *
+ * Exemplo: `openai|google|$ctx>300|$mmlu<20`
+ * → (openai OR google) AND $ctx>300 AND $mmlu<20
  *
  * @param models - Modelos a filtrar
  * @param rules - Regras de filtro
- * @returns Modelos que atendem a pelo menos uma regra
+ * @returns Modelos que atendem a todas as metricas E ao menos um texto
  */
 export const applyFilters = (
   models: readonly EnrichedModel[],
@@ -179,20 +184,18 @@ export const applyFilters = (
 ): readonly EnrichedModel[] => {
   if (rules.length === 0) return models;
 
-  const matchedIds = new Set<string>();
-  const result: EnrichedModel[] = [];
+  const textRules = rules.filter((r): r is TextFilterRule => r.type === 'text');
+  const metricRules = rules.filter((r): r is MetricFilterRule => r.type === 'metric');
 
-  for (const model of models) {
-    if (matchedIds.has(model.id)) continue;
-    const matches = rules.some((rule) =>
-      rule.type === 'text' ? matchesText(model, rule.value) : matchesMetric(model, rule),
-    );
-    if (matches) {
-      matchedIds.add(model.id);
-      result.push(model);
-    }
-  }
-  return result;
+  return models.filter((model) => {
+    const metricsPass = metricRules.length === 0 ||
+      metricRules.every((rule) => matchesMetric(model, rule));
+    if (!metricsPass) return false;
+
+    const textPass = textRules.length === 0 ||
+      textRules.some((rule) => matchesText(model, rule.value));
+    return textPass;
+  });
 };
 
 /** Nomes de metricas disponiveis para display no modal */

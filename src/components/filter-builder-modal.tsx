@@ -72,7 +72,7 @@ export const FilterBuilderModal = ({ filterText, onClose, maxHeight = 16 }: Filt
     <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1}>
       <Box gap={2}>
         <Text bold color="cyan">Filtros Compostos</Text>
-        <Text dimColor>(cada filtro expande resultados — OR/UNION)</Text>
+        <Text dimColor>(texto: OR | metricas: AND — corta itens)</Text>
       </Box>
 
       <Box flexDirection="column" marginTop={1}>

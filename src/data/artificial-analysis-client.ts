@@ -17,22 +17,22 @@ const AAModelCreatorSchema = z.object({
 });
 
 const AAEvaluationsSchema = z.object({
-  artificial_analysis_intelligence_index: z.number().nullable().default(null),
-  artificial_analysis_coding_index: z.number().nullable().default(null),
-  artificial_analysis_math_index: z.number().nullable().default(null),
-  mmlu_pro: z.number().nullable().default(null),
-  gpqa: z.number().nullable().default(null),
-  hle: z.number().nullable().default(null),
-  livecodebench: z.number().nullable().default(null),
-  scicode: z.number().nullable().default(null),
-  math_500: z.number().nullable().default(null),
-  aime: z.number().nullable().default(null),
+  artificial_analysis_intelligence_index: z.number().nullable().catch(null),
+  artificial_analysis_coding_index: z.number().nullable().catch(null),
+  artificial_analysis_math_index: z.number().nullable().catch(null),
+  mmlu_pro: z.number().nullable().catch(null),
+  gpqa: z.number().nullable().catch(null),
+  hle: z.number().nullable().catch(null),
+  livecodebench: z.number().nullable().catch(null),
+  scicode: z.number().nullable().catch(null),
+  math_500: z.number().nullable().catch(null),
+  aime: z.number().nullable().catch(null),
 });
 
 const AAPricingSchema = z.object({
-  price_1m_blended_3_to_1: z.number().nullable().default(null),
-  price_1m_input_tokens: z.number().nullable().default(null),
-  price_1m_output_tokens: z.number().nullable().default(null),
+  price_1m_blended_3_to_1: z.number().nullable().catch(null),
+  price_1m_input_tokens: z.number().nullable().catch(null),
+  price_1m_output_tokens: z.number().nullable().catch(null),
 });
 
 const AAModelSchema = z.object({
@@ -40,11 +40,21 @@ const AAModelSchema = z.object({
   name: z.string(),
   slug: z.string(),
   model_creator: AAModelCreatorSchema,
-  evaluations: AAEvaluationsSchema.default({}),
-  pricing: AAPricingSchema.default({}),
-  median_output_tokens_per_second: z.number().nullable().default(null),
-  median_time_to_first_token_seconds: z.number().nullable().default(null),
-  median_time_to_first_answer_token: z.number().nullable().default(null),
+  evaluations: AAEvaluationsSchema.catch({
+    artificial_analysis_intelligence_index: null,
+    artificial_analysis_coding_index: null,
+    artificial_analysis_math_index: null,
+    mmlu_pro: null, gpqa: null, hle: null,
+    livecodebench: null, scicode: null, math_500: null, aime: null,
+  }),
+  pricing: AAPricingSchema.catch({
+    price_1m_blended_3_to_1: null,
+    price_1m_input_tokens: null,
+    price_1m_output_tokens: null,
+  }),
+  median_output_tokens_per_second: z.number().nullable().catch(null),
+  median_time_to_first_token_seconds: z.number().nullable().catch(null),
+  median_time_to_first_answer_token: z.number().nullable().catch(null),
 });
 
 export type AAModel = z.infer<typeof AAModelSchema>;

@@ -48,9 +48,14 @@ src/
 │   ├── execution-screen.tsx         # Dashboard de execução real-time
 │   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
 │   └── diff-screen.tsx              # Diff completo da branch
-├── components/                      # 7 componentes
+├── components/                      # 12 componentes
 │   ├── model-table.tsx              # Tabela basica de modelos OpenRouter
-│   ├── enhanced-model-table.tsx     # Tabela avancada: scroll horizontal, sort, benchmarks AA
+│   ├── enhanced-model-table.tsx     # Tabela avancada: scroll, sort selector, column selector
+│   ├── table-columns.ts            # Definicoes de colunas (label, description, sortable)
+│   ├── filter-parser.ts            # Parser de filtros compostos (texto OR, metricas AND)
+│   ├── filter-builder-modal.tsx     # Modal visual para construir filtros
+│   ├── column-selector-modal.tsx    # Modal de checkboxes para metricas visiveis
+│   ├── sort-selector-modal.tsx      # Modal seletor de criterio de ordenacao
 │   ├── model-selector.tsx           # Seletor DRY: useModels + loading + ModelTable
 │   ├── multi-line-input.tsx         # Input multi-linha com paste e scroll
 │   ├── status-bar.tsx               # Barra informacional de modelos atuais
@@ -80,7 +85,7 @@ src/
 └── utils/                           # file-tree, path-guard
 ```
 
-62 arquivos, ~8.500 LOC (~137 LOC/arquivo).
+77 arquivos, ~13.000 LOC (~169 LOC/arquivo).
 
 ## Worker Pipeline Profiles
 
@@ -106,7 +111,7 @@ Integração opcional com a API da Artificial Analysis para enriquecer a tabela 
 
 **Dados enriquecidos:** Intelligence Index (0-100), Coding Index, Math Index, MMLU-Pro, GPQA, HLE, LiveCodeBench, SciCode, MATH-500, AIME, tokens/s, TTFT, custo-benefício (I/$).
 
-**Enhanced Model Table:** Tabela avançada com scroll horizontal (h/l), ordenação multi-critério (s/S), filtros preset (p: todos, com benchmarks, high intel, best value, fast), filtro de texto (f para ativar digitação, ESC/Enter para sair e liberar navegação), e matching automático entre modelos OpenRouter e AA por nome normalizado.
+**Enhanced Model Table:** Tabela avançada com scroll horizontal (←→), vertical (↑↓, `<>` para página), seletor de ordenação (`s` abre modal de seleção, `S` inverte direção), seletor de colunas (`c` abre modal de checkboxes com descrições de cada métrica — substitui legenda fixa), filtros preset (`p`), filtro de texto (`f` para digitar, `F` para construtor visual). Filtros compostos: texto OR'd, métricas AND'd (ex: `openai|google|$Intel>=40|$MMLU>=70` → (openai OR google) AND Intel>=40 AND MMLU>=70). Matching automático entre modelos OpenRouter e AA por nome normalizado.
 
 **Cache:** 24h para benchmarks, matching por slug/nome normalizado. Client em `src/data/artificial-analysis-client.ts`, tipo enriquecido em `src/data/enriched-model.ts`.
 

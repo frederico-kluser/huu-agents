@@ -15,6 +15,7 @@ import SelectInput from 'ink-select-input';
 import { EnhancedModelTable } from '../components/enhanced-model-table.js';
 import { ProfileBuilderScreen } from './profile-builder-screen.js';
 import { AiPipelineBuilderScreen } from './ai-pipeline-builder-screen.js';
+import { ProfileListScreen } from './profile-list-screen.js';
 import { useModels } from '../hooks/use-models.js';
 import { useArtificialAnalysis } from '../hooks/use-artificial-analysis.js';
 import { buildEnrichedModels } from '../data/enriched-model.js';
@@ -33,6 +34,8 @@ type OptionsPhase =
   | 'planner-model'
   | 'worker-model'
   | 'create-profile'
+  | 'edit-profile'
+  | 'profile-list'
   | 'ai-builder'
   | 'guide'
   | 'edit-openrouter-key'
@@ -79,6 +82,7 @@ export const OptionsScreen = ({
 }: OptionsScreenProps) => {
   const [phase, setPhase] = useState<OptionsPhase>('menu');
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [editingProfile, setEditingProfile] = useState<WorkerProfile | null>(null);
   const [editingOrKey, setEditingOrKey] = useState(config.openrouterApiKey);
   const [editingAaKey, setEditingAaKey] = useState(config.artificialAnalysisApiKey ?? '');
   const { state: modelsState } = useModels(config.openrouterApiKey);
@@ -261,12 +265,47 @@ export const OptionsScreen = ({
     );
   }
 
-  // --- Profile builder ---
+  // --- Profile builder (create) ---
   if (phase === 'create-profile') {
     return (
       <ProfileBuilderScreen
         onSave={(profile) => void handleProfileSave(profile)}
         onCancel={() => setPhase('pipelines-menu')}
+      />
+    );
+  }
+
+  // --- Profile builder (edit/duplicate) ---
+  if (phase === 'edit-profile' && editingProfile) {
+    return (
+      <ProfileBuilderScreen
+        existingProfile={editingProfile}
+        onSave={(profile) => {
+          setEditingProfile(null);
+          void handleProfileSave(profile);
+        }}
+        onCancel={() => { setEditingProfile(null); setPhase('profile-list'); }}
+      />
+    );
+  }
+
+  // --- Profile list (browse/edit/delete) ---
+  if (phase === 'profile-list') {
+    return (
+      <ProfileListScreen
+        projectRoot={projectRoot}
+        feedbackMessage={saveMessage}
+        onEdit={(profile) => {
+          setSaveMessage(null);
+          setEditingProfile(profile);
+          setPhase('edit-profile');
+        }}
+        onDuplicate={(profile) => {
+          setSaveMessage(null);
+          setEditingProfile(profile);
+          setPhase('edit-profile');
+        }}
+        onBack={() => { setSaveMessage(null); setPhase('pipelines-menu'); }}
       />
     );
   }
@@ -357,18 +396,20 @@ export const OptionsScreen = ({
     return (
       <SubMenu
         title="Pipeline Profiles"
-        description="Crie pipelines multi-step para customizar a execucao dos workers."
+        description="Crie, edite e gerencie pipelines multi-step para seus workers."
         saveMessage={saveMessage}
         onBack={() => { setSaveMessage(null); setPhase('menu'); }}
         items={[
           { label: 'Criar Pipeline com IA (AI Builder)', value: 'ai-builder' },
           { label: 'Criar Pipeline Manual (Wizard)', value: 'create-profile' },
+          { label: 'Editar / Excluir Pipelines', value: 'profile-list' },
           { label: 'Voltar', value: 'back' },
         ]}
         onSelect={(value) => {
           setSaveMessage(null);
           if (value === 'ai-builder') setPhase('ai-builder');
           else if (value === 'create-profile') setPhase('create-profile');
+          else if (value === 'profile-list') setPhase('profile-list');
           else setPhase('menu');
         }}
       />

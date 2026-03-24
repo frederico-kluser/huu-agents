@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "code-refactor-constraint",
+      "description": "Analisa e refatora código para atender limites de linhas, funções e complexidade, com até 5 tentativas.",
+      "scope": "project",
+      "langchainModel": "minimax/minimax-m2.5",
+      "entryStepId": "init-counter",
+      "maxStepExecutions": 30,
+      "seats": 15,
+      "initialVariables": {
+        "custom_tries": 0
+      },
+      "steps": [
+        {
+          "id": "init-counter",
+          "type": "set_variable",
+          "target": "custom_tries",
+          "valueExpression": "$custom_tries + 1",
+          "next": "analyze"
+        },
+        {
+          "id": "analyze",
+          "type": "langchain_prompt",
+          "inputTemplate": "Analyze all code files in this project. For each file, report: 1) total lines of code, 2) number of functions/methods, 3) maximum cyclomatic complexity of any function. Identify which files violate these constraints: max 500 lines, max 10 functions, max cyclomatic complexity 7.",
+          "outputTarget": "custom_analysis",
+          "next": "refactor"
+        },
+        {
+          "id": "refactor",
+          "type": "pi_agent",
+          "taskTemplate": "Refactor the project files to meet these constraints: max 500 lines per file, max 10 functions per file, max cyclomatic complexity 7 per function. Files to fix:\n$custom_analysis\n\nTask: $task",
+          "next": "verify"
+        },
+        {
+          "id": "verify",
+          "type": "langchain_prompt",
+          "inputTemplate": "Verify the refactoring by analyzing all code files. For each file report: lines, function count, max cyclomatic complexity. Check if ALL constraints are met (max 500 lines, max 10 functions, max complexity 7). Respond with exactly 'approved' if all pass, otherwise list remaining violations.",
+          "outputTarget": "custom_verification",
+          "next": "check-verification"
+        },
+        {
+          "id": "check-verification",
+          "type": "condition",
+          "expression": "$custom_verification == approved",
+          "whenTrue": "done",
+          "whenFalse": "check-limit"
+        },
+        {
+          "id": "check-limit",
+          "type": "condition",
+          "expression": "$custom_tries >= 5",
+          "whenTrue": "fail",
+          "whenFalse": "init-counter"
+        },
+        {
+          "id": "done",
+          "type": "goto",
+          "target": "__end__"
+        },
+        {
+          "id": "fail",
+          "type": "fail",
+          "messageTemplate": "Could not meet refactoring constraints after 5 attempts: $custom_verification"
+        }
+      ]
+    }
+  ]
+}

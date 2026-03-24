@@ -13,6 +13,7 @@ npm run dev            # tsc --watch
 npm start              # node dist/cli.js
 npm run lint           # ESLint
 npm run typecheck      # tsc --noEmit
+npm run fetch-benchmarks  # Fetch OR + AA → bundled JSON + cache global
 ```
 
 ## Stack
@@ -28,7 +29,8 @@ src/
 ├── data/models.ts                   # Catálogo dinâmico de modelos (OpenRouter API)
 │   ├── openrouter-client.ts         # Client HTTP + cache para OpenRouter /models
 │   ├── artificial-analysis-client.ts # Client HTTP + cache para Artificial Analysis API
-│   └── enriched-model.ts            # Tipo enriquecido: OpenRouter + AA benchmarks
+│   ├── enriched-model.ts            # Tipo enriquecido: OpenRouter + AA benchmarks
+│   └── bundled-benchmarks.json      # Fallback offline (gerado por npm run fetch-benchmarks)
 ├── schemas/
 │   ├── dag.schema.ts                # DAG output do Planner
 │   ├── config.schema.ts             # Config persistida (selectedAgents + legado)
@@ -79,7 +81,8 @@ src/
 │       └── git-diff-handler.ts      # git_diff (captura diff do worktree)
 ├── services/
 │   ├── profile-catalog.ts           # Persistência de perfis (global + local, Result<T>)
-│   └── ai-pipeline-generator.ts     # Geração de pipelines via LangChain (2 chamadas LLM)
+│   ├── ai-pipeline-generator.ts     # Geração de pipelines via LangChain (2 chamadas LLM)
+│   └── offline-benchmark-cache.ts   # Cache offline em disco (~/.pi-dag-cli/benchmark-cache.json)
 ├── git/                             # git-wrapper, worktree-manager, conflict-resolver
 ├── hooks/                           # use-config, use-file-tree, use-api-validation, use-elapsed-time, use-models, use-artificial-analysis
 └── utils/                           # file-tree, path-guard
@@ -111,9 +114,9 @@ Integração opcional com a API da Artificial Analysis para enriquecer a tabela 
 
 **Dados enriquecidos:** Intelligence Index (0-100), Coding Index, Math Index, MMLU-Pro, GPQA, HLE, LiveCodeBench, SciCode, MATH-500, AIME, tokens/s, TTFT, custo-benefício (I/$).
 
-**Enhanced Model Table:** Tabela avançada com scroll horizontal (←→), vertical (↑↓, `<>` para página), seletor de ordenação (`s` abre modal de seleção, `S` inverte direção), seletor de colunas (`c` abre modal de checkboxes com descrições de cada métrica — substitui legenda fixa), filtros preset (`p`), filtro de texto (`f` para digitar, `F` para construtor visual). Filtros compostos: texto OR'd, métricas AND'd (ex: `openai|google|$Intel>=40|$MMLU>=70` → (openai OR google) AND Intel>=40 AND MMLU>=70). Matching automático entre modelos OpenRouter e AA por nome normalizado.
+**Enhanced Model Table:** Tabela avançada com scroll horizontal (←→), vertical (↑↓, `<>` para página), seletor de ordenação (`s` abre modal de seleção, `S` inverte direção), seletor de colunas (`c` abre modal de checkboxes com descrições de cada métrica — substitui legenda fixa), filtros preset (`p`), filtro de texto (`f` para digitar, `F` para construtor visual), **atualização manual** (`u` busca dados frescos das APIs e salva no cache global). Filtros compostos: texto OR'd, métricas AND'd (ex: `openai|google|$Intel>=40|$MMLU>=70` → (openai OR google) AND Intel>=40 AND MMLU>=70). Matching automático entre modelos OpenRouter e AA por nome normalizado.
 
-**Cache:** 24h para benchmarks, matching por slug/nome normalizado. Client em `src/data/artificial-analysis-client.ts`, tipo enriquecido em `src/data/enriched-model.ts`.
+**Cache offline:** Hierarquia de 4 níveis: (1) memória do processo, (2) disco global `~/.pi-dag-cli/benchmark-cache.json` (TTL 24h), (3) bundled fallback `src/data/bundled-benchmarks.json` (gerado por `npm run fetch-benchmarks`), (4) fetch das APIs. Ao abrir o app, tenta disco/bundled antes de chamar APIs. Tecla `u` na tabela invalida caches e busca dados frescos. Script `npm run fetch-benchmarks` puxa dados das duas APIs, cruza e salva tanto no bundled JSON quanto no cache global. Client em `src/data/artificial-analysis-client.ts`, tipo enriquecido em `src/data/enriched-model.ts`, cache em `src/services/offline-benchmark-cache.ts`.
 
 ## AI Pipeline Builder
 

@@ -24,6 +24,9 @@ import type { Config } from '../schemas/config.schema.js';
 import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
 import { validateProfileReferences } from '../schemas/worker-profile.schema.js';
 import { saveProfile } from '../services/profile-catalog.js';
+import { saveGlobalCache } from '../services/offline-benchmark-cache.js';
+import { getCachedModels } from '../data/openrouter-client.js';
+import { getCachedAAModels } from '../data/artificial-analysis-client.js';
 
 type OptionsPhase =
   | 'menu'
@@ -81,9 +84,10 @@ export const OptionsScreen = ({
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [editingOrKey, setEditingOrKey] = useState(config.openrouterApiKey);
   const [editingAaKey, setEditingAaKey] = useState(config.artificialAnalysisApiKey ?? '');
-  const { state: modelsState } = useModels(config.openrouterApiKey);
+  const [refreshing, setRefreshing] = useState(false);
+  const { state: modelsState, forceRefresh: refreshOR } = useModels(config.openrouterApiKey);
   const hasAaKey = Boolean(config.artificialAnalysisApiKey);
-  const { state: aaState } = useArtificialAnalysis(config.artificialAnalysisApiKey);
+  const { state: aaState, forceRefresh: refreshAA } = useArtificialAnalysis(config.artificialAnalysisApiKey);
 
   // ESC volta ao parent de qualquer sub-fase de edicao de keys
   useInput((_input, key) => {
@@ -97,6 +101,8 @@ export const OptionsScreen = ({
     aaState.status === 'loaded' ? aaState.models : [],
   );
   const hasAAData = hasAaKey && aaState.status === 'loaded';
+  const cacheAge = (modelsState.status === 'loaded' ? modelsState.cacheAge : null)
+    ?? (aaState.status === 'loaded' ? aaState.cacheAge : null);
   const orKeyValid = hasValidOrKey(config);
 
   const handlePlannerSelect = useCallback((model: EnrichedModel) => {
@@ -150,6 +156,31 @@ export const OptionsScreen = ({
     setPhase('keys-menu');
   }, [config, onConfigChange]);
 
+  /** Atualiza dados de ambas as APIs e salva no cache global em disco */
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setSaveMessage('Atualizando dados das APIs...');
+    try {
+      const [orOk] = await Promise.all([
+        refreshOR(),
+        refreshAA(),
+      ]);
+
+      // Salvar no cache global em disco
+      const orModels = getCachedModels();
+      const aaModels = getCachedAAModels();
+      if (orModels) {
+        await saveGlobalCache(orModels, aaModels ?? []);
+      }
+
+      setSaveMessage(orOk ? 'Dados atualizados e salvos no cache global' : 'Falha parcial ao atualizar');
+    } catch {
+      setSaveMessage('Erro ao atualizar dados');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshOR, refreshAA]);
+
   const handleAaKeySave = useCallback((value: string) => {
     const updated: Config = {
       ...config,
@@ -190,6 +221,9 @@ export const OptionsScreen = ({
         onCancel={() => setPhase('models-menu')}
         title={`Selecionar Modelo Planner (${enrichedModels.length} modelos${hasAAData ? ' + benchmarks AA' : ''})`}
         hasAAData={hasAAData}
+        onRefresh={() => void handleRefresh()}
+        refreshing={refreshing}
+        cacheAge={cacheAge}
       />
     );
   }
@@ -203,6 +237,9 @@ export const OptionsScreen = ({
         onCancel={() => setPhase('models-menu')}
         title={`Selecionar Modelo Worker (${enrichedModels.length} modelos${hasAAData ? ' + benchmarks AA' : ''})`}
         hasAAData={hasAAData}
+        onRefresh={() => void handleRefresh()}
+        refreshing={refreshing}
+        cacheAge={cacheAge}
       />
     );
   }

@@ -17,7 +17,9 @@
     "typecheck": "tsc --noEmit",
     "preaa:benchmarks": "npm run build -- --pretty false",
     "aa:benchmarks": "node dist/scripts/list-aa-benchmarks.js",
-    "test:aa:benchmarks": "npm run build -- --pretty false && node --test dist/scripts/list-aa-benchmarks.test.js"
+    "test:aa:benchmarks": "npm run build -- --pretty false && node --test dist/scripts/list-aa-benchmarks.test.js",
+    "prefetch-benchmarks": "npm run build -- --pretty false",
+    "fetch-benchmarks": "node dist/scripts/fetch-benchmarks.js"
   },
   "dependencies": {
     "@langchain/core": "^1.1.34",

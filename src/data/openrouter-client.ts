@@ -66,6 +66,20 @@ let cacheTimestamp = 0;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
 
 /**
+ * Semeia o cache em memória com dados carregados do disco.
+ * Usado pelo sistema de cache offline para evitar fetch desnecessario.
+ * Nao sobrescreve cache existente que ainda esteja valido.
+ *
+ * @param models - Modelos previamente salvos em disco
+ * @param timestamp - Timestamp epoch de quando os dados foram salvos
+ */
+export const seedCache = (models: readonly OpenRouterModel[], timestamp: number): void => {
+  if (cachedModels !== null && Date.now() - cacheTimestamp < CACHE_TTL_MS) return;
+  cachedModels = models;
+  cacheTimestamp = timestamp;
+};
+
+/**
  * Converte string de preço por token para USD por milhão de tokens.
  *
  * @param pricePerToken - Preço em USD por token (string da API)

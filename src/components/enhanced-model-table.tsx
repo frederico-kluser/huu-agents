@@ -23,6 +23,7 @@ import {
   pad, padR,
   type SortKey, type FilterMode,
 } from './table-columns.js';
+import { formatCacheAge } from '../services/offline-benchmark-cache.js';
 
 // Header (border+title+filter+border) + table header + separator
 const FIXED_HEADER = 7;
@@ -35,6 +36,12 @@ interface EnhancedModelTableProps {
   readonly title?: string;
   readonly hasAAData?: boolean;
   readonly onCancel?: () => void;
+  /** Callback para atualizar dados das APIs (tecla u) */
+  readonly onRefresh?: () => void;
+  /** Indica que um refresh esta em andamento */
+  readonly refreshing?: boolean;
+  /** Idade do cache em timestamp epoch (para exibir no footer) */
+  readonly cacheAge?: number | null;
 }
 
 /**
@@ -58,6 +65,7 @@ interface EnhancedModelTableProps {
  */
 export const EnhancedModelTable = ({
   models, onSelect, title, hasAAData, onCancel,
+  onRefresh, refreshing, cacheAge,
 }: EnhancedModelTableProps) => {
   // Core state
   const [filter, setFilter] = useState('');
@@ -163,6 +171,7 @@ export const EnhancedModelTable = ({
     if (input === 'c') { setColumnSelectorOpen(true); return; }
     if (input === 's' && !key.shift) { setSortSelectorOpen(true); return; }
     if (input === 'S' || (input === 's' && key.shift)) setSortAsc((prev) => !prev);
+    if (input === 'u' && onRefresh && !refreshing) { onRefresh(); return; }
 
     // Vertical
     if (key.downArrow) setCursor((c) => Math.min(c + 1, sorted.length - 1));
@@ -320,8 +329,10 @@ export const EnhancedModelTable = ({
             <Text color="green">F</Text><Text dimColor>construtor</Text>
             <Text color="green">p</Text><Text dimColor>preset</Text>
             <Text color="white">Enter</Text><Text dimColor>selecionar</Text>
+            {onRefresh && <><Text color="green">u</Text><Text dimColor>{refreshing ? 'atualizando...' : 'atualizar'}</Text></>}
             {onCancel && <><Text color="red">ESC</Text><Text dimColor>voltar</Text></>}
             <Text dimColor>{sorted.length}/{models.length}</Text>
+            {cacheAge != null && <Text dimColor>cache: {formatCacheAge(cacheAge)}</Text>}
           </Box>
 
           {(colOffset > 0 || colOffset < maxColOffset) && (

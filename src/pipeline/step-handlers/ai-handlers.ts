@@ -86,7 +86,7 @@ export const handleLangchainPrompt: StepHandler = async (step, state, ctx) => {
   ctx.onProgress?.(`[langchain:${s.id}] Done (${output.length} chars)`);
 
   // Escreve output na variável target
-  const reservedKeys = ['task', 'diff', 'error'] as const;
+  const reservedKeys = ['task', 'diff', 'error', 'context'] as const;
   if ((reservedKeys as readonly string[]).includes(s.outputTarget)) {
     return {
       nextStepId: s.next === END_STEP_ID ? null : s.next,

@@ -298,11 +298,15 @@ export const App = ({ cliArgs }: AppProps) => {
     );
   }
 
-  if (screen === 'profile-select') {
+  if (screen === 'profile-select' && pipeline.config) {
     return (
       <Box flexDirection="column">
         {statusBarEl}
-        <ProfileSelectScreen projectRoot={process.cwd()} onSelect={handleProfileSelect} />
+        <ProfileSelectScreen
+          projectRoot={process.cwd()}
+          onSelect={handleProfileSelect}
+          apiKey={pipeline.config.openrouterApiKey}
+        />
       </Box>
     );
   }

@@ -43,11 +43,13 @@ export type StepTraceEntry = z.infer<typeof StepTraceEntrySchema>;
  * - task: descrição da tarefa (pode ser sobrescrita por steps)
  * - diff: diff do worktree (populada por git_diff step)
  * - error: último erro (populada pelo runtime em falhas)
+ * - context: lista de arquivos de contexto selecionados pelo usuário
  */
 export const ReservedVarsSchema = z.object({
   task: z.string().describe('Current task description'),
   diff: z.string().default('').describe('Current worktree diff'),
   error: z.string().default('').describe('Last error message'),
+  context: z.string().default('').describe('Context files selected by the user (newline-separated)'),
 });
 export type ReservedVars = z.infer<typeof ReservedVarsSchema>;
 
@@ -87,16 +89,18 @@ export type WorkerPipelineState = z.infer<typeof WorkerPipelineStateSchema>;
  * @param entryStepId - ID do step inicial (do perfil)
  * @param task - Descrição da tarefa do DAG node
  * @param initialVariables - Valores iniciais para variáveis custom_*
+ * @param contextFiles - Arquivos de contexto selecionados pelo usuário
  * @returns Estado inicial limpo
  */
 export function createInitialState(
   entryStepId: string,
   task: string,
   initialVariables: Readonly<Record<string, InitialVariableValue>>,
+  contextFiles: readonly string[] = [],
 ): WorkerPipelineState {
   return {
     currentStepId: entryStepId,
-    reservedVars: { task, diff: '', error: '' },
+    reservedVars: { task, diff: '', error: '', context: contextFiles.join('\n') },
     customVars: { ...initialVariables },
     trace: [],
     stepExecutionCount: 0,

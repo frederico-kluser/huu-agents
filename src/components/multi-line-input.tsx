@@ -4,14 +4,21 @@
  * e submete apenas quando Enter é pressionado duas vezes seguidas.
  * Durante a edição, apenas ESC funciona como hotkey externa.
  *
+ * Suporta paste de conteúdo multi-linha: detecta input com newlines
+ * (que chega como string única em paste) e o processa corretamente.
+ * Linhas longas são truncadas visualmente para respeitar bordas do box.
+ *
  * @module
  */
 
 import React, { useState, useRef } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useStdout } from 'ink';
 
 /** Mínimo de caracteres para permitir submit */
 const MIN_LENGTH = 5;
+
+/** Máximo de linhas exibidas (scroll virtual para textos longos) */
+const MAX_VISIBLE_LINES = 20;
 
 interface MultiLineInputProps {
   /** Callback ao submeter (double Enter) */
@@ -56,17 +63,21 @@ function processChar(
   setValue: React.Dispatch<React.SetStateAction<string>>,
 ) {
   if (isDelete) { setValue((prev) => prev.slice(0, -1)); }
-  else if (!isControl && input) { setValue((prev) => prev + input); }
+  else if (!isControl && input) {
+    // Paste pode chegar como string multi-char: adiciona tudo de uma vez
+    setValue((prev) => prev + input);
+  }
 }
 
 /**
  * Hook que gerencia estado do input multi-linha.
  * Enter adiciona newline; double-Enter submete; ESC cancela.
+ * Paste de texto longo é aceito como input de string única.
  *
  * @param onSubmit - Callback com texto final
  * @param onCancel - Callback de cancelamento
  * @param isActive - Se está capturando input
- * @returns Estado do input (value, showSubmitHint)
+ * @returns Estado do input (value, showSubmitHint, lineCount)
  */
 function useMultiLineInput(
   onSubmit: (value: string) => void,
@@ -87,13 +98,25 @@ function useMultiLineInput(
     processChar(input, key.backspace || key.delete, isControlKey(key), setValue);
   }, { isActive });
 
-  return { value, showSubmitHint: lastKeyWasEnterRef.current && value.trim().length >= MIN_LENGTH };
+  const lineCount = value.split('\n').length;
+  return { value, showSubmitHint: lastKeyWasEnterRef.current && value.trim().length >= MIN_LENGTH, lineCount };
+}
+
+/**
+ * Trunca uma linha para caber na largura disponível do box.
+ * Considera padding e line number prefix.
+ */
+function truncateLine(line: string, maxWidth: number): string {
+  if (maxWidth <= 0 || line.length <= maxWidth) return line;
+  return line.slice(0, maxWidth - 1) + '\u2026';
 }
 
 /**
  * Input multi-linha controlado internamente.
  * Enter adiciona nova linha; Enter + Enter (consecutivos) submete.
  * Suporta paste de conteúdo multi-linha.
+ * Linhas longas são truncadas para respeitar bordas do box.
+ * Textos com muitas linhas mostram apenas as últimas MAX_VISIBLE_LINES.
  *
  * @example
  * <MultiLineInput
@@ -105,9 +128,19 @@ function useMultiLineInput(
 export function MultiLineInput({
   onSubmit, onCancel, placeholder = '', isActive = true,
 }: MultiLineInputProps) {
-  const { value, showSubmitHint } = useMultiLineInput(onSubmit, onCancel, isActive);
-  const lines = value.split('\n');
+  const { value, showSubmitHint, lineCount } = useMultiLineInput(onSubmit, onCancel, isActive);
+  const { stdout } = useStdout();
+  const termWidth = stdout?.columns ?? 80;
+  // Largura útil: terminal - padding (2*1) - border (2*1) - line number prefix (~4 chars)
+  const maxLineWidth = termWidth - 8;
+
+  const allLines = value.split('\n');
   const isEmpty = value.length === 0;
+
+  // Scroll virtual: mostra apenas as últimas N linhas se o texto for muito longo
+  const startIdx = allLines.length > MAX_VISIBLE_LINES ? allLines.length - MAX_VISIBLE_LINES : 0;
+  const visibleLines = allLines.slice(startIdx);
+  const hasScrolled = startIdx > 0;
 
   return (
     <Box flexDirection="column">
@@ -115,21 +148,32 @@ export function MultiLineInput({
         {isEmpty ? (
           <Text dimColor>{placeholder}</Text>
         ) : (
-          lines.map((line, i) => (
-            <Text key={i}>
-              <Text dimColor>{String(i + 1).padStart(2)} </Text>
-              <Text>{line}</Text>
-              {i === lines.length - 1 && <Text color="cyan">{'\u2588'}</Text>}
-            </Text>
-          ))
+          <>
+            {hasScrolled && (
+              <Text dimColor italic>  ... {startIdx} linha(s) acima ...</Text>
+            )}
+            {visibleLines.map((line, i) => {
+              const lineNum = startIdx + i + 1;
+              const isLast = lineNum === allLines.length;
+              const displayLine = truncateLine(line, maxLineWidth);
+              return (
+                <Text key={i}>
+                  <Text dimColor>{String(lineNum).padStart(3)} </Text>
+                  <Text>{displayLine}</Text>
+                  {isLast && <Text color="cyan">{'\u2588'}</Text>}
+                </Text>
+              );
+            })}
+          </>
         )}
       </Box>
-      <Box paddingX={1}>
+      <Box paddingX={1} gap={2}>
         {showSubmitHint ? (
           <Text color="yellow">Pressione Enter novamente para enviar</Text>
         ) : (
           <Text dimColor>[Enter] nova linha  |  [Enter+Enter] enviar  |  [ESC] cancelar</Text>
         )}
+        {lineCount > 1 && <Text dimColor>({lineCount} linhas)</Text>}
       </Box>
     </Box>
   );

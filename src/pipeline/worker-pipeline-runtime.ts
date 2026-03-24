@@ -40,6 +40,8 @@ export interface PipelineRunConfig {
   readonly worktreePath: string;
   /** API key do OpenRouter */
   readonly apiKey: string;
+  /** Arquivos de contexto selecionados pelo usuário (disponíveis como $context) */
+  readonly contextFiles?: readonly string[];
   /** Callback para progresso a nível de step */
   readonly onProgress?: (message: string) => void;
   /** Callback invocado após cada step com a trace atualizada */
@@ -68,8 +70,8 @@ export interface PipelineRunConfig {
  * });
  */
 export async function runWorkerPipeline(config: PipelineRunConfig): Promise<WorkerResult> {
-  const { profile, task, nodeId, worktreePath, apiKey, onProgress, onStepComplete } = config;
-  const state = createInitialState(profile.entryStepId, task, profile.initialVariables);
+  const { profile, task, nodeId, worktreePath, apiKey, contextFiles, onProgress, onStepComplete } = config;
+  const state = createInitialState(profile.entryStepId, task, profile.initialVariables, contextFiles);
 
   const ctx: StepHandlerContext = {
     worktreePath,

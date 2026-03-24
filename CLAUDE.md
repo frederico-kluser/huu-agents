@@ -46,8 +46,10 @@ src/
 │   ├── execution-screen.tsx         # Dashboard de execução real-time
 │   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
 │   └── diff-screen.tsx              # Diff completo da branch
-├── components/                      # 6 componentes
+├── components/                      # 7 componentes
 │   ├── model-table.tsx              # Tabela filtrável de modelos OpenRouter
+│   ├── model-selector.tsx           # Seletor DRY: useModels + loading + ModelTable
+│   ├── multi-line-input.tsx         # Input multi-linha com paste e scroll
 │   ├── status-bar.tsx               # Barra informacional de modelos atuais
 │   ├── pipeline-trace.tsx           # Trace step-by-step de pipeline
 │   ├── dag-node-row.tsx, tree-node.tsx, worker-log.tsx
@@ -83,7 +85,7 @@ Perfis definem pipelines multi-step dentro de cada worker. O DAG permanece como 
 
 **7 step types V1:** `pi_agent`, `langchain_prompt`, `condition`, `goto`, `set_variable`, `git_diff`, `fail`
 
-**Variáveis:** reservadas (`$task`, `$diff`, `$error`) + custom (`$custom_*`)
+**Variáveis:** reservadas (`$task`, `$diff`, `$error`, `$context`) + custom (`$custom_*`)
 
 **Catálogo dual:** global (`~/.pi-dag-cli/worker-profiles.json`) + local (`.pi-dag/worker-profiles.json`). Local tem precedência.
 
@@ -110,6 +112,10 @@ Modo de criação de pipelines via IA. O usuário descreve o que deseja em lingu
 **Validação:** resultado passa por Zod (WorkerProfileSchema) + `validateProfileReferences()` antes de salvar.
 
 **Validação:** Zod `superRefine` (entryStepId, set_variable XOR, step IDs duplicados, namespace de initialVariables) + `validateProfileReferences()` (integridade referencial de targets)
+
+**Seleção de modelo:** Na execução, o usuário pode manter o modelo default do perfil ou escolher qualquer modelo do catálogo OpenRouter. O `ModelSelector` (DRY) é usado em todas as telas que precisam de seleção de modelo.
+
+**Regra de variáveis:** `pi_agent` NÃO pode definir variáveis — apenas modifica arquivos. Use `langchain_prompt` para análise/decisão (salva em `outputTarget`), `set_variable` para contadores/flags, `git_diff` para capturar diff.
 
 **Runtime:** imutável (spread operators), seed de `initialVariables`, loop guard via `maxStepExecutions`, trace com timestamps epoch
 

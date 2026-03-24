@@ -16,7 +16,7 @@ import { z } from 'zod';
 // ── Constants ───────────────────────────────────────────────────────
 
 /** Nomes de variáveis reservadas pelo runtime */
-export const RESERVED_VARS = ['task', 'diff', 'error'] as const;
+export const RESERVED_VARS = ['task', 'diff', 'error', 'context'] as const;
 export type ReservedVar = (typeof RESERVED_VARS)[number];
 
 /** Prefixo obrigatório para variáveis definidas pelo usuário */

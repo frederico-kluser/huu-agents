@@ -2,7 +2,7 @@
  * Resolução de variáveis para templates de pipeline.
  * Módulo dedicado com funções puras — baseado em dWvt6.
  *
- * Suporta variáveis reservadas ($task, $diff, $error)
+ * Suporta variáveis reservadas ($task, $diff, $error, $context)
  * e custom ($custom_*). Variáveis não resolvidas são deixadas
  * como estão (degradação graciosa, sem crash).
  *
@@ -46,6 +46,7 @@ export function resolveVariable(
   if (name === 'task') return state.reservedVars.task;
   if (name === 'diff') return state.reservedVars.diff;
   if (name === 'error') return state.reservedVars.error;
+  if (name === 'context') return state.reservedVars.context;
 
   if (name.startsWith(CUSTOM_VAR_PREFIX)) {
     const val = state.customVars[name];

@@ -113,6 +113,7 @@ function createWorkerFn(
   logs: LogEntry[],
   onEmit: () => void,
   activeProfile?: WorkerProfile,
+  contextFiles?: readonly string[],
 ): WorkerFn {
   return async (node: DAGNode, worktreePath: string) => {
     // Pipeline profile ativo: delegar ao runtime multi-step
@@ -127,6 +128,7 @@ function createWorkerFn(
         nodeId: node.id,
         worktreePath,
         apiKey: config.openrouterApiKey,
+        contextFiles: contextFiles ?? node.files,
         onProgress,
       });
     }
@@ -286,7 +288,7 @@ export async function runPipeline(
       activeNodeId = id;
       emit('executing');
     });
-    const workerFn = createWorkerFn(config, logs, () => emit('executing'), activeProfile);
+    const workerFn = createWorkerFn(config, logs, () => emit('executing'), activeProfile, contextFiles);
 
     await executeDAG(
       currentDAG,
@@ -366,7 +368,7 @@ export async function retryPipeline(
       activeNodeId = id;
       emit('executing');
     });
-    const workerFn = createWorkerFn(config, logs, () => emit('executing'), activeProfile);
+    const workerFn = createWorkerFn(config, logs, () => emit('executing'), activeProfile, undefined);
 
     await executeDAG(
       currentDAG,

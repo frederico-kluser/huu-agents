@@ -2,18 +2,17 @@
  * Tela de opcoes acessivel via [o] de qualquer tela.
  * Centraliza: selecao individual de modelos (planner/worker),
  * criacao de pipeline profiles, e guia de referencia.
+ * Usa ModelSelector (DRY) para selecao de modelos.
  *
  * @module
  */
 
 import { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
-import Spinner from 'ink-spinner';
 import SelectInput from 'ink-select-input';
-import { ModelTable } from '../components/model-table.js';
+import { ModelSelector } from '../components/model-selector.js';
 import { ProfileBuilderScreen } from './profile-builder-screen.js';
 import { AiPipelineBuilderScreen } from './ai-pipeline-builder-screen.js';
-import { useModels } from '../hooks/use-models.js';
 import { findModel, formatPrice } from '../data/models.js';
 import type { ModelEntry } from '../data/models.js';
 import type { Config } from '../schemas/config.schema.js';
@@ -60,7 +59,6 @@ export const OptionsScreen = ({
 }: OptionsScreenProps) => {
   const [phase, setPhase] = useState<OptionsPhase>('menu');
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const { state: modelsState } = useModels(config.openrouterApiKey);
 
   const handlePlannerSelect = useCallback((model: ModelEntry) => {
     const updated: Config = {
@@ -101,47 +99,24 @@ export const OptionsScreen = ({
     setPhase('menu');
   }, [projectRoot]);
 
-  const allModels = modelsState.status === 'loaded' ? modelsState.models : [];
-
-  // --- Loading models ---
-  if ((phase === 'planner-model' || phase === 'worker-model') && modelsState.status === 'loading') {
-    return (
-      <Box flexDirection="column" padding={1}>
-        <Box gap={1}>
-          <Text color="green"><Spinner type="dots" /></Text>
-          <Text>Carregando modelos da OpenRouter...</Text>
-        </Box>
-      </Box>
-    );
-  }
-
-  if ((phase === 'planner-model' || phase === 'worker-model') && modelsState.status === 'error') {
-    return (
-      <Box flexDirection="column" padding={1}>
-        <Text color="red">Erro ao carregar modelos: {modelsState.error}</Text>
-        <Text dimColor>Pressione ESC para voltar</Text>
-      </Box>
-    );
-  }
-
-  // --- Planner model selection ---
+  // --- Planner model selection (uses ModelSelector DRY component) ---
   if (phase === 'planner-model') {
     return (
-      <ModelTable
-        models={allModels}
+      <ModelSelector
+        apiKey={config.openrouterApiKey}
         onSelect={handlePlannerSelect}
-        title={`Selecionar Modelo Planner (${allModels.length} modelos)`}
+        title="Selecionar Modelo Planner"
       />
     );
   }
 
-  // --- Worker model selection ---
+  // --- Worker model selection (uses ModelSelector DRY component) ---
   if (phase === 'worker-model') {
     return (
-      <ModelTable
-        models={allModels}
+      <ModelSelector
+        apiKey={config.openrouterApiKey}
         onSelect={handleWorkerSelect}
-        title={`Selecionar Modelo Worker (${allModels.length} modelos)`}
+        title="Selecionar Modelo Worker"
       />
     );
   }
@@ -205,9 +180,6 @@ export const OptionsScreen = ({
       <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
         <Text bold color="cyan">{'\u2699\uFE0F'}  Opcoes</Text>
         <Text dimColor>Configure modelos, crie pipelines e consulte o guia de referencia.</Text>
-        {modelsState.status === 'loaded' && (
-          <Text dimColor>{modelsState.models.length} modelos disponiveis via OpenRouter</Text>
-        )}
       </Box>
 
       {/* Descricoes das opcoes */}
@@ -225,7 +197,7 @@ export const OptionsScreen = ({
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color="yellow">{'\u{1F9E0}'} AI Pipeline Builder</Text>
           <Text dimColor>  Descreva o que deseja e a IA gera a pipeline automaticamente.</Text>
-          <Text dimColor>  Usa LangChain + DeepSeek (configuravel) para interpretar e criar.</Text>
+          <Text dimColor>  Escolha qualquer modelo da OpenRouter para gerar a pipeline.</Text>
         </Box>
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color="yellow">{'\u{1F527}'} Pipeline Manual</Text>
@@ -354,6 +326,11 @@ function GuideOverview() {
       <Text bold color="yellow">Onde ficam salvos?</Text>
       <Text dimColor>  {'\u2022'} Global: ~/.pi-dag-cli/worker-profiles.json</Text>
       <Text dimColor>  {'\u2022'} Local:  .pi-dag/worker-profiles.json (tem precedencia)</Text>
+      <Text> </Text>
+      <Text bold color="yellow">Regra importante sobre variaveis:</Text>
+      <Text dimColor>  {'\u2022'} pi_agent NAO pode definir variaveis — apenas modifica arquivos</Text>
+      <Text dimColor>  {'\u2022'} Use langchain_prompt para analise e decisoes (salva em variavel)</Text>
+      <Text dimColor>  {'\u2022'} Use set_variable para contadores e flags literais</Text>
     </Box>
   );
 }
@@ -366,12 +343,15 @@ function GuideSteps() {
       <Text bold color="green">{'\u{1F916}'} pi_agent — Executa IA no worktree</Text>
       <Text dimColor>  Roda o Pi Coding Agent com o taskTemplate resolvido.</Text>
       <Text dimColor>  O agente pode criar/editar arquivos e rodar comandos.</Text>
+      <Text color="red" dimColor>  NAO pode definir variaveis — use langchain_prompt para analise.</Text>
       <Text> </Text>
       <Text bold color="magenta">{'\u{1F4AC}'} langchain_prompt — Gera texto via LLM</Text>
       <Text dimColor>  Envia prompt ao LLM e salva a resposta em uma variavel.</Text>
+      <Text dimColor>  Use para: analise, planejamento, decisoes, revisao de codigo.</Text>
       <Text> </Text>
       <Text bold color="yellow">{'\u{1F500}'} condition — Bifurca execucao</Text>
       <Text dimColor>  Avalia: $variavel operador valor (ex: $custom_tries {'>'}= 3)</Text>
+      <Text dimColor>  A variavel deve ter sido definida por um step anterior.</Text>
       <Text> </Text>
       <Text bold color="cyan">{'\u27A1\uFE0F'}  goto — Salto incondicional</Text>
       <Text dimColor>  Move o cursor para outro step ou __end__.</Text>
@@ -402,6 +382,12 @@ function GuideVariables() {
       <Text bold color="cyan">Variaveis Custom ($custom_*)</Text>
       <Text dimColor>  Criadas via initialVariables, set_variable, ou langchain_prompt.</Text>
       <Text dimColor>  Use $custom_nome em qualquer template de step.</Text>
+      <Text> </Text>
+      <Text bold color="cyan">Quem pode definir variaveis?</Text>
+      <Text dimColor>  {'\u2022'} <Text color="white">set_variable</Text>: valor literal ou expressao aritmetica</Text>
+      <Text dimColor>  {'\u2022'} <Text color="white">langchain_prompt</Text>: resultado do LLM no outputTarget</Text>
+      <Text dimColor>  {'\u2022'} <Text color="white">git_diff</Text>: diff do worktree no target</Text>
+      <Text dimColor>  {'\u2022'} <Text color="red">pi_agent</Text>: NAO pode definir variaveis</Text>
     </Box>
   );
 }
@@ -418,10 +404,19 @@ function GuideExamples() {
       <Text color="yellow">  [4] condition       $custom_tries {'>'}= 3</Text>
       <Text dimColor>       true {'\u2192'} __end__  |  false {'\u2192'} volta p/ [1]</Text>
       <Text> </Text>
+      <Text bold color="yellow">Exemplo: analyze-then-act (decisao com langchain_prompt)</Text>
+      <Text dimColor>  Analisa se refatoracao e necessaria e age conforme resultado.</Text>
+      <Text> </Text>
+      <Text color="magenta">  [1] langchain_prompt "Analyze $task..." {'\u2192'} $custom_needs_refactor</Text>
+      <Text color="yellow">  [2] condition        $custom_needs_refactor == true</Text>
+      <Text color="green">  [3] pi_agent         "Refactor: $task" (se true)</Text>
+      <Text dimColor>       false {'\u2192'} __end__ (nenhuma acao necessaria)</Text>
+      <Text> </Text>
       <Text bold color="yellow">Dica: Comece simples</Text>
       <Text dimColor>  1. Crie um perfil com 2-3 steps para testar</Text>
       <Text dimColor>  2. Use initialVariables para contadores de loop</Text>
       <Text dimColor>  3. Sempre inclua condicao de saida</Text>
+      <Text dimColor>  4. Use langchain_prompt para decisoes, pi_agent para acoes</Text>
     </Box>
   );
 }

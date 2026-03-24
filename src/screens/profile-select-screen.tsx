@@ -3,6 +3,9 @@
  * Exibe perfis disponiveis (global + local) com descricoes detalhadas
  * e preview da arvore de steps.
  *
+ * Quando um perfil é selecionado, oferece a opção de usar o modelo
+ * default do perfil ou escolher outro modelo do catálogo completo OpenRouter.
+ *
  * @module
  */
 
@@ -12,30 +15,39 @@ import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
 import { listProfiles } from '../services/profile-catalog.js';
 import { PipelineGraph } from '../components/pipeline-graph.js';
 import { findStepTypeInfo } from '../components/step-field-defs.js';
+import { ModelSelector } from '../components/model-selector.js';
+import type { ModelEntry } from '../data/models.js';
+
+type Phase = 'select' | 'confirm-model' | 'choose-model';
 
 interface ProfileSelectScreenProps {
   /** Caminho absoluto da raiz do projeto para carregar catalogos */
   readonly projectRoot: string;
-  /** Callback com perfil selecionado ou null (sem perfil) */
+  /** Callback com perfil selecionado (com override de modelo) ou null (sem perfil) */
   readonly onSelect: (profile: WorkerProfile | null) => void;
+  /** API key para carregar catálogo de modelos */
+  readonly apiKey: string;
 }
 
 /**
  * Tela de selecao de perfil antes da execucao.
  * Primeira opcao e sempre "No profile" para preservar comportamento atual.
- * Exibe preview da arvore do pipeline quando um perfil esta selecionado.
+ * Ao selecionar um perfil, oferece escolha de modelo para execução.
  *
  * @example
  * <ProfileSelectScreen
  *   projectRoot="/home/user/my-project"
+ *   apiKey="sk-or-..."
  *   onSelect={(profile) => startExecution(profile)}
  * />
  */
-export const ProfileSelectScreen = ({ projectRoot, onSelect }: ProfileSelectScreenProps) => {
+export const ProfileSelectScreen = ({ projectRoot, onSelect, apiKey }: ProfileSelectScreenProps) => {
+  const [phase, setPhase] = useState<Phase>('select');
   const [profiles, setProfiles] = useState<readonly WorkerProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [pendingProfile, setPendingProfile] = useState<WorkerProfile | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -54,6 +66,7 @@ export const ProfileSelectScreen = ({ projectRoot, onSelect }: ProfileSelectScre
   const totalItems = profiles.length + 1; // "No profile" + perfis
 
   useInput((input, key) => {
+    if (phase !== 'select') return;
     if (key.upArrow || input === 'k') {
       setSelectedIdx((prev) => (prev > 0 ? prev - 1 : totalItems - 1));
     }
@@ -65,11 +78,54 @@ export const ProfileSelectScreen = ({ projectRoot, onSelect }: ProfileSelectScre
         onSelect(null);
       } else {
         const profile = profiles[selectedIdx - 1];
-        if (profile) onSelect(profile);
+        if (profile) {
+          setPendingProfile(profile);
+          setPhase('confirm-model');
+        }
       }
     }
   });
 
+  // Phase: confirm model — ask if user wants default or custom model
+  if (phase === 'confirm-model' && pendingProfile) {
+    return (
+      <ModelConfirmPhase
+        profile={pendingProfile}
+        onUseDefault={() => onSelect(pendingProfile)}
+        onChooseModel={() => setPhase('choose-model')}
+        onBack={() => { setPendingProfile(null); setPhase('select'); }}
+      />
+    );
+  }
+
+  // Phase: choose model — full OpenRouter catalog
+  if (phase === 'choose-model' && pendingProfile) {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box borderStyle="round" borderColor="cyan" paddingX={2} flexDirection="column">
+          <Text bold color="cyan">{'\u{1F527}'} Selecionar Modelo para Pipeline</Text>
+          <Text dimColor>O modelo selecionado será usado nos steps pi_agent e langchain_prompt.</Text>
+          <Text dimColor>Perfil: <Text color="white">{pendingProfile.id}</Text></Text>
+        </Box>
+        <Box marginTop={1}>
+          <ModelSelector
+            apiKey={apiKey}
+            onSelect={(m: ModelEntry) => {
+              const overridden: WorkerProfile = {
+                ...pendingProfile,
+                workerModel: m.id,
+                langchainModel: m.id,
+              };
+              onSelect(overridden);
+            }}
+            title="Modelo para Execução da Pipeline"
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  // Phase: select profile
   if (loading) {
     return (
       <Box padding={1}>
@@ -208,6 +264,68 @@ export const ProfileSelectScreen = ({ projectRoot, onSelect }: ProfileSelectScre
     </Box>
   );
 };
+
+// ── Model Confirm Phase ──────────────────────────────────────────
+
+interface ModelConfirmPhaseProps {
+  readonly profile: WorkerProfile;
+  readonly onUseDefault: () => void;
+  readonly onChooseModel: () => void;
+  readonly onBack: () => void;
+}
+
+/**
+ * Fase intermediária: mostra o modelo default do perfil e pergunta
+ * se o usuário quer usá-lo ou escolher outro.
+ */
+function ModelConfirmPhase({ profile, onUseDefault, onChooseModel, onBack }: ModelConfirmPhaseProps) {
+  useInput((input, key) => {
+    if (key.return || input === 'd') onUseDefault();
+    if (input === 'c') onChooseModel();
+    if (key.escape) onBack();
+  });
+
+  const defaultModel = profile.workerModel ?? 'config default (Worker model)';
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
+        <Text bold color="cyan">{'\u{1F527}'} Modelo para Execução da Pipeline</Text>
+        <Text dimColor>Perfil: <Text color="white" bold>{profile.id}</Text></Text>
+        {profile.description && <Text dimColor>{profile.description}</Text>}
+      </Box>
+
+      <Box marginTop={1} flexDirection="column" paddingX={1}>
+        <Text bold color="yellow">Qual modelo usar para executar os steps da pipeline?</Text>
+        <Text> </Text>
+        <Box gap={1}>
+          <Text bold color="green">Default:</Text>
+          <Text color="white">{defaultModel}</Text>
+        </Box>
+        {profile.langchainModel && profile.langchainModel !== profile.workerModel && (
+          <Box gap={1}>
+            <Text bold color="magenta">LangChain:</Text>
+            <Text color="white">{profile.langchainModel}</Text>
+          </Box>
+        )}
+      </Box>
+
+      <Box marginTop={1} flexDirection="column" paddingX={1}>
+        <Text color="cyan" bold>[d/Enter]</Text>
+        <Text dimColor>  Usar modelo default ({defaultModel})</Text>
+        <Text> </Text>
+        <Text color="cyan" bold>[c]</Text>
+        <Text dimColor>  Escolher outro modelo (catálogo completo OpenRouter)</Text>
+      </Box>
+
+      <Box marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
+        <Text dimColor>[d/Enter] usar default  |  [c] escolher modelo  |  [ESC] voltar</Text>
+      </Box>
+    </Box>
+  );
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
 
 interface StepTypeCount {
   readonly type: string;

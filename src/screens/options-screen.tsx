@@ -23,7 +23,7 @@ import { findModel, formatPrice } from '../data/models.js';
 import type { Config } from '../schemas/config.schema.js';
 import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
 import { validateProfileReferences } from '../schemas/worker-profile.schema.js';
-import { saveProfile } from '../services/profile-catalog.js';
+import { saveProfile, deleteProfile, listProfiles } from '../services/profile-catalog.js';
 
 type OptionsPhase =
   | 'menu'
@@ -34,6 +34,8 @@ type OptionsPhase =
   | 'worker-model'
   | 'create-profile'
   | 'ai-builder'
+  | 'edit-profile-list'
+  | 'edit-profile'
   | 'guide'
   | 'edit-openrouter-key'
   | 'edit-aa-key';
@@ -81,6 +83,7 @@ export const OptionsScreen = ({
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [editingOrKey, setEditingOrKey] = useState(config.openrouterApiKey);
   const [editingAaKey, setEditingAaKey] = useState(config.artificialAnalysisApiKey ?? '');
+  const [editingProfile, setEditingProfile] = useState<WorkerProfile | null>(null);
   const { state: modelsState } = useModels(config.openrouterApiKey);
   const hasAaKey = Boolean(config.artificialAnalysisApiKey);
   const { state: aaState } = useArtificialAnalysis(config.artificialAnalysisApiKey);
@@ -261,12 +264,43 @@ export const OptionsScreen = ({
     );
   }
 
-  // --- Profile builder ---
+  // --- Profile builder (create) ---
   if (phase === 'create-profile') {
     return (
       <ProfileBuilderScreen
         onSave={(profile) => void handleProfileSave(profile)}
         onCancel={() => setPhase('pipelines-menu')}
+      />
+    );
+  }
+
+  // --- Profile builder (edit) ---
+  if (phase === 'edit-profile' && editingProfile) {
+    return (
+      <ProfileBuilderScreen
+        existingProfile={editingProfile}
+        onSave={(profile) => void handleProfileSave(profile)}
+        onCancel={() => { setEditingProfile(null); setPhase('edit-profile-list'); }}
+      />
+    );
+  }
+
+  // --- Profile list for editing/deleting ---
+  if (phase === 'edit-profile-list') {
+    return (
+      <ProfileListScreen
+        projectRoot={projectRoot}
+        saveMessage={saveMessage}
+        onEdit={(profile) => { setSaveMessage(null); setEditingProfile(profile); setPhase('edit-profile'); }}
+        onDelete={async (profile) => {
+          const result = await deleteProfile(profile.id, profile.scope, projectRoot);
+          if (result.ok) {
+            setSaveMessage(`Perfil "${profile.id}" removido com sucesso`);
+          } else {
+            setSaveMessage(`Erro ao remover: ${result.error.kind}`);
+          }
+        }}
+        onBack={() => { setSaveMessage(null); setPhase('pipelines-menu'); }}
       />
     );
   }
@@ -357,18 +391,20 @@ export const OptionsScreen = ({
     return (
       <SubMenu
         title="Pipeline Profiles"
-        description="Crie pipelines multi-step para customizar a execucao dos workers."
+        description="Crie, edite ou remova pipelines multi-step para customizar a execucao dos workers."
         saveMessage={saveMessage}
         onBack={() => { setSaveMessage(null); setPhase('menu'); }}
         items={[
           { label: 'Criar Pipeline com IA (AI Builder)', value: 'ai-builder' },
           { label: 'Criar Pipeline Manual (Wizard)', value: 'create-profile' },
+          { label: 'Editar/Deletar Pipeline Existente', value: 'edit-list' },
           { label: 'Voltar', value: 'back' },
         ]}
         onSelect={(value) => {
           setSaveMessage(null);
           if (value === 'ai-builder') setPhase('ai-builder');
           else if (value === 'create-profile') setPhase('create-profile');
+          else if (value === 'edit-list') setPhase('edit-profile-list');
           else setPhase('menu');
         }}
       />
@@ -458,6 +494,155 @@ function SubMenu({ title, description, saveMessage, onBack, items, onSelect }: S
 
       <Box paddingX={1}>
         <Text dimColor>[ESC] voltar</Text>
+      </Box>
+    </Box>
+  );
+}
+
+// ── Profile List Screen (edit/delete) ─────────────────────────────────
+
+interface ProfileListScreenProps {
+  readonly projectRoot: string;
+  readonly saveMessage: string | null;
+  readonly onEdit: (profile: WorkerProfile) => void;
+  readonly onDelete: (profile: WorkerProfile) => Promise<void>;
+  readonly onBack: () => void;
+}
+
+/**
+ * Lista perfis existentes para edicao ou remocao.
+ * Carrega catalogos global + local e permite navegar, editar e deletar.
+ */
+function ProfileListScreen({ projectRoot, saveMessage, onEdit, onDelete, onBack }: ProfileListScreenProps) {
+  const [profiles, setProfiles] = useState<readonly WorkerProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  const loadProfiles = useCallback(async () => {
+    setLoading(true);
+    try {
+      const loaded = await listProfiles(projectRoot);
+      setProfiles(loaded);
+      setSelectedIdx((prev) => Math.min(prev, Math.max(0, loaded.length - 1)));
+    } finally {
+      setLoading(false);
+    }
+  }, [projectRoot]);
+
+  // Load on mount and reload when saveMessage changes (save/delete completed)
+  const [lastMessage, setLastMessage] = useState<string | null>(saveMessage);
+  if (saveMessage !== lastMessage) {
+    setLastMessage(saveMessage);
+    void loadProfiles();
+  }
+
+  // Initial load
+  const [initialized, setInitialized] = useState(false);
+  if (!initialized) {
+    setInitialized(true);
+    void loadProfiles();
+  }
+
+  useInput((input, key) => {
+    if (confirmDelete) {
+      if (input === 'y' || input === 'Y') {
+        const profile = profiles.find((p) => p.id === confirmDelete);
+        if (profile) {
+          void onDelete(profile);
+        }
+        setConfirmDelete(null);
+      } else {
+        setConfirmDelete(null);
+      }
+      return;
+    }
+
+    if (key.escape) { onBack(); return; }
+    if (key.upArrow || input === 'k') {
+      setSelectedIdx((prev) => (prev > 0 ? prev - 1 : Math.max(0, profiles.length - 1)));
+    }
+    if (key.downArrow || input === 'j') {
+      setSelectedIdx((prev) => (prev < profiles.length - 1 ? prev + 1 : 0));
+    }
+    if (key.return || input === 'e') {
+      const profile = profiles[selectedIdx];
+      if (profile) onEdit(profile);
+    }
+    if (input === 'x' || input === 'd') {
+      const profile = profiles[selectedIdx];
+      if (profile) setConfirmDelete(profile.id);
+    }
+  });
+
+  if (loading) {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box gap={1}>
+          <Text color="green"><Spinner type="dots" /></Text>
+          <Text>Carregando perfis...</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
+        <Text bold color="cyan">Editar/Deletar Pipeline Profiles</Text>
+        <Text dimColor>Selecione um perfil para editar ou deletar.</Text>
+      </Box>
+
+      {saveMessage && (
+        <Box marginTop={1} paddingX={1}>
+          <Text color={saveMessage.startsWith('Erro') ? 'red' : 'green'}>{saveMessage}</Text>
+        </Box>
+      )}
+
+      {confirmDelete && (
+        <Box marginTop={1} paddingX={1}>
+          <Text color="red" bold>Confirmar remocao de "{confirmDelete}"? [y] sim / [qualquer tecla] cancelar</Text>
+        </Box>
+      )}
+
+      {profiles.length === 0 ? (
+        <Box marginTop={1} paddingX={2} flexDirection="column">
+          <Text dimColor>Nenhum perfil encontrado.</Text>
+          <Text dimColor>Crie um perfil primeiro via AI Builder ou Wizard.</Text>
+        </Box>
+      ) : (
+        <Box marginTop={1} flexDirection="column">
+          {profiles.map((profile, idx) => {
+            const isSelected = selectedIdx === idx;
+            return (
+              <Box key={profile.id} flexDirection="column">
+                <Box>
+                  <Text color={isSelected ? 'cyan' : 'white'} bold={isSelected}>
+                    {isSelected ? '\u25B6 ' : '  '}
+                    {profile.id}
+                  </Text>
+                  <Text dimColor> [{profile.scope === 'project' ? 'local' : 'global'}]</Text>
+                  <Text dimColor> ({profile.steps.length} steps, seats: {profile.seats})</Text>
+                </Box>
+                {isSelected && profile.description && (
+                  <Box marginLeft={4}>
+                    <Text dimColor>{profile.description}</Text>
+                  </Box>
+                )}
+                {isSelected && (
+                  <Box marginLeft={4} gap={2}>
+                    <Text dimColor>[Enter/e] editar</Text>
+                    <Text dimColor>[x/d] deletar</Text>
+                  </Box>
+                )}
+              </Box>
+            );
+          })}
+        </Box>
+      )}
+
+      <Box marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
+        <Text dimColor>[j/k] navegar  |  [Enter/e] editar  |  [x/d] deletar  |  [ESC] voltar</Text>
       </Box>
     </Box>
   );

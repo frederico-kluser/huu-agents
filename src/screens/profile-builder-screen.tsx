@@ -145,8 +145,12 @@ export const ProfileBuilderScreen = ({ existingProfile, onSave, onCancel }: Prof
   return (
     <Box flexDirection="column" padding={1}>
       <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
-        <Text bold color="cyan">{'\u{1F527}'} Criar Pipeline Profile</Text>
-        <Text dimColor>Monte uma pipeline multi-step para seus workers. [?] ajuda sobre variaveis</Text>
+        <Text bold color="cyan">{'\u{1F527}'} {existingProfile ? 'Editar' : 'Criar'} Pipeline Profile</Text>
+        <Text dimColor>
+          {existingProfile
+            ? `Editando perfil "${existingProfile.id}". [?] ajuda sobre variaveis`
+            : 'Monte uma pipeline multi-step para seus workers. [?] ajuda sobre variaveis'}
+        </Text>
 
         {/* Header fields */}
         <Box marginTop={1} flexDirection="column">

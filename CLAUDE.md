@@ -26,7 +26,9 @@ src/
 ├── cli.tsx, cli-args.ts             # Entry point + CLI args parser
 ├── app.tsx                          # Router (state machine + StatusBar)
 ├── data/models.ts                   # Catálogo dinâmico de modelos (OpenRouter API)
-│   └── openrouter-client.ts         # Client HTTP + cache para OpenRouter /models
+│   ├── openrouter-client.ts         # Client HTTP + cache para OpenRouter /models
+│   ├── artificial-analysis-client.ts # Client HTTP + cache para Artificial Analysis API
+│   └── enriched-model.ts            # Tipo enriquecido: OpenRouter + AA benchmarks
 ├── schemas/
 │   ├── dag.schema.ts                # DAG output do Planner
 │   ├── config.schema.ts             # Config persistida (selectedAgents + legado)
@@ -35,7 +37,7 @@ src/
 │   ├── worker-pipeline-state.schema.ts  # Estado efêmero de runtime do pipeline
 │   └── errors.ts                    # Mensagens de erro de config
 ├── screens/                         # 11 telas Ink
-│   ├── config-screen.tsx            # API key + seleção de modelos (setup inicial)
+│   ├── config-screen.tsx            # API keys (OpenRouter + AA) + seleção de modelos
 │   ├── context-screen.tsx           # Seleção de arquivos/dirs
 │   ├── task-screen.tsx              # Input da macro-task
 │   ├── options-screen.tsx           # [o] Opcoes: modelos individuais + criar pipelines
@@ -47,7 +49,8 @@ src/
 │   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
 │   └── diff-screen.tsx              # Diff completo da branch
 ├── components/                      # 7 componentes
-│   ├── model-table.tsx              # Tabela filtrável de modelos OpenRouter
+│   ├── model-table.tsx              # Tabela basica de modelos OpenRouter
+│   ├── enhanced-model-table.tsx     # Tabela avancada: scroll horizontal, sort, benchmarks AA
 │   ├── model-selector.tsx           # Seletor DRY: useModels + loading + ModelTable
 │   ├── multi-line-input.tsx         # Input multi-linha com paste e scroll
 │   ├── status-bar.tsx               # Barra informacional de modelos atuais
@@ -73,11 +76,11 @@ src/
 │   ├── profile-catalog.ts           # Persistência de perfis (global + local, Result<T>)
 │   └── ai-pipeline-generator.ts     # Geração de pipelines via LangChain (2 chamadas LLM)
 ├── git/                             # git-wrapper, worktree-manager, conflict-resolver
-├── hooks/                           # use-config, use-file-tree, use-api-validation, use-elapsed-time, use-models
+├── hooks/                           # use-config, use-file-tree, use-api-validation, use-elapsed-time, use-models, use-artificial-analysis
 └── utils/                           # file-tree, path-guard
 ```
 
-58 arquivos, ~7.500 LOC (~129 LOC/arquivo).
+62 arquivos, ~8.500 LOC (~137 LOC/arquivo).
 
 ## Worker Pipeline Profiles
 
@@ -93,7 +96,19 @@ Perfis definem pipelines multi-step dentro de cada worker. O DAG permanece como 
 
 **Schema do perfil:** `id` em kebab-case como label principal, `seats` (1-16) para limitar concorrência por perfil e `initialVariables` para seed de variáveis `custom_*`.
 
-**Atalho [o] opcoes:** acessível de qualquer tela (exceto config/loading/executing). Permite trocar modelo planner ou worker individualmente (catálogo completo de 18 modelos), criar pipeline profiles manualmente ou via IA. Legenda `[o] opcoes` aparece no rodapé de cada tela.
+**Atalho [o] opcoes:** acessível de qualquer tela (exceto config/loading/executing). Permite trocar modelo planner ou worker individualmente (catálogo completo de modelos com benchmarks), criar pipeline profiles manualmente ou via IA. Legenda `[o] opcoes` aparece no rodapé de cada tela.
+
+## Artificial Analysis Integration
+
+Integração opcional com a API da Artificial Analysis para enriquecer a tabela de modelos com benchmarks independentes.
+
+**Config:** `artificialAnalysisApiKey` em `~/.pi-dag-cli.json` (opcional, solicitado no setup inicial).
+
+**Dados enriquecidos:** Intelligence Index (0-100), Coding Index, Math Index, MMLU-Pro, GPQA, HLE, LiveCodeBench, SciCode, MATH-500, AIME, tokens/s, TTFT, custo-benefício (I/$).
+
+**Enhanced Model Table:** Tabela avançada com scroll horizontal (h/l), ordenação multi-critério (s/S), filtros preset (f: todos, com benchmarks, high intel, best value, fast), e matching automático entre modelos OpenRouter e AA por nome normalizado.
+
+**Cache:** 24h para benchmarks, matching por slug/nome normalizado. Client em `src/data/artificial-analysis-client.ts`, tipo enriquecido em `src/data/enriched-model.ts`.
 
 ## AI Pipeline Builder
 
@@ -149,7 +164,7 @@ Referência: `docs/general/file-agent-patterns.md`.
 - LOC acima de 500/arquivo
 - Novas dependências
 - Modificar arquitetura do pipeline (orchestrator, dag-executor)
-- Alterar client da OpenRouter (`src/data/openrouter-client.ts`)
+- Alterar client da OpenRouter (`src/data/openrouter-client.ts`) ou Artificial Analysis (`src/data/artificial-analysis-client.ts`)
 - Adicionar novos step types ao registry
 
 **NUNCA:**

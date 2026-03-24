@@ -4,23 +4,31 @@ import TextInput from 'ink-text-input';
 import Spinner from 'ink-spinner';
 import { useApiValidation, type ValidationState } from '../hooks/use-api-validation.js';
 import { useModels } from '../hooks/use-models.js';
-import { ModelTable } from '../components/model-table.js';
+import { EnhancedModelTable } from '../components/enhanced-model-table.js';
 import { findModel, formatPrice } from '../data/models.js';
-import type { ModelEntry } from '../data/models.js';
+import type { EnrichedModel } from '../data/enriched-model.js';
 import type { Config } from '../schemas/config.schema.js';
 import { getApiErrorMessage } from '../schemas/errors.js';
+import { useArtificialAnalysis } from '../hooks/use-artificial-analysis.js';
+import { buildEnrichedModels } from '../data/enriched-model.js';
 
-type ConfigStep = 'api-key' | 'loading-models' | 'planner-model' | 'worker-model' | 'concurrency';
+type ConfigStep =
+  | 'api-key'
+  | 'aa-key'
+  | 'loading-models'
+  | 'planner-model'
+  | 'worker-model'
+  | 'concurrency';
 
 interface ConfigScreenProps {
   readonly onComplete: (config: Config) => void;
-  /** Pular etapa de API key (para reconfiguração de modelos via [m]) */
+  /** Pular etapa de API key (para reconfiguracao de modelos via [m]) */
   readonly skipApiKey?: boolean;
-  /** Config existente (preserva worktreeBasePath e pré-seleciona modelos ao reabrir via [m]) */
+  /** Config existente (preserva worktreeBasePath e pre-seleciona modelos ao reabrir via [m]) */
   readonly existingConfig?: Config;
 }
 
-/** Feedback visual do status de validação da API key */
+/** Feedback visual do status de validacao da API key */
 const ValidationFeedback = ({ validation }: { readonly validation: ValidationState }) => {
   if (validation.status === 'validating') return <Text color="yellow">Validando...</Text>;
   if (validation.status === 'valid') return <Text color="green">API key valida</Text>;
@@ -43,12 +51,13 @@ const ModelSummary = ({ label, modelId }: { readonly label: string; readonly mod
 };
 
 /**
- * Tela de configuração do Pi DAG CLI.
- * Coleta API key, carrega modelos da OpenRouter em tempo real,
- * e permite seleção de modelos Planner e Worker via tabela filtrável.
+ * Tela de configuracao do Pi DAG CLI.
+ * Coleta API keys (OpenRouter obrigatoria, Artificial Analysis opcional),
+ * carrega modelos em tempo real, e permite selecao via tabela filtravel
+ * com benchmarks quando AA key e fornecida.
  *
  * @param props.onComplete - Callback com Config validada
- * @param props.skipApiKey - Pular API key (reconfiguração via [m])
+ * @param props.skipApiKey - Pular API key (reconfiguracao via [m])
  * @param props.existingConfig - Config existente
  *
  * @example
@@ -60,6 +69,7 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
   const initialStep: ConfigStep = skipApiKey ? 'loading-models' : 'api-key';
   const [step, setStep] = useState<ConfigStep>(initialStep);
   const [apiKey, setApiKey] = useState(existingConfig?.openrouterApiKey ?? '');
+  const [aaApiKey, setAaApiKey] = useState(existingConfig?.artificialAnalysisApiKey ?? '');
   const [plannerModelId, setPlannerModelId] = useState(existingConfig?.selectedAgents?.planner ?? '');
   const [workerModelId, setWorkerModelId] = useState(existingConfig?.selectedAgents?.worker ?? '');
   const [concurrency, setConcurrency] = useState(String(existingConfig?.maxConcurrency ?? 4));
@@ -69,28 +79,42 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
   const activeApiKey = skipApiKey ? existingConfig?.openrouterApiKey : apiKey;
   const { state: modelsState } = useModels(activeApiKey);
 
+  // Carrega dados AA se key disponivel
+  const activeAaKey = skipApiKey ? existingConfig?.artificialAnalysisApiKey : (aaApiKey || undefined);
+  const { state: aaState } = useArtificialAnalysis(activeAaKey);
+
   const handleApiKeySubmit = useCallback((value: string) => {
     if (!value.trim()) return;
     void validate(value).then((isValid) => {
       if (isValid) {
-        setStep('loading-models');
+        setStep('aa-key');
       }
     });
   }, [validate]);
 
-  // Avança automaticamente quando modelos carregarem
+  const handleAaKeySubmit = useCallback(() => {
+    // AA key e opcional — Enter vazio pula
+    setStep('loading-models');
+  }, []);
+
+  // Avanca automaticamente quando modelos carregarem
   if (step === 'loading-models' && modelsState.status === 'loaded') {
     setStep('planner-model');
   }
 
-  const handlePlannerSelect = useCallback((model: ModelEntry) => {
+  const enrichedModels = buildEnrichedModels(
+    modelsState.status === 'loaded' ? modelsState.models : [],
+    aaState.status === 'loaded' ? aaState.models : [],
+  );
+
+  const handlePlannerSelect = useCallback((model: EnrichedModel) => {
     setPlannerModelId(model.id);
     setStep('worker-model');
   }, []);
 
   const worktreeBasePath = existingConfig?.worktreeBasePath ?? '.pi-dag-worktrees';
 
-  const handleWorkerSelect = useCallback((model: ModelEntry) => {
+  const handleWorkerSelect = useCallback((model: EnrichedModel) => {
     setWorkerModelId(model.id);
     setStep('concurrency');
   }, []);
@@ -100,13 +124,14 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
     const valid = !isNaN(parsed) && parsed >= 1 && parsed <= 16 ? parsed : 4;
     onComplete({
       openrouterApiKey: apiKey,
+      artificialAnalysisApiKey: aaApiKey || undefined,
       plannerModel: plannerModelId,
       workerModel: workerModelId,
       selectedAgents: { planner: plannerModelId, worker: workerModelId },
       maxConcurrency: valid,
       worktreeBasePath,
     });
-  }, [apiKey, plannerModelId, workerModelId, worktreeBasePath, onComplete]);
+  }, [apiKey, aaApiKey, plannerModelId, workerModelId, worktreeBasePath, onComplete]);
 
   // Step: API Key
   if (step === 'api-key') {
@@ -128,6 +153,32 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
         </Box>
         <Box marginTop={1}>
           <Text dimColor>Cole sua API key e pressione Enter</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  // Step: AA API Key (opcional)
+  if (step === 'aa-key') {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
+          <Text bold color="cyan">Artificial Analysis API Key <Text dimColor>(opcional)</Text></Text>
+          <Text dimColor>Adiciona benchmarks (Intelligence Index, Coding, Math, GPQA, HLE, etc.),</Text>
+          <Text dimColor>velocidade (tokens/s) e pricing detalhado a tabela de modelos.</Text>
+          <Box marginTop={1}>
+            <Text>AA API Key: </Text>
+            <TextInput
+              value={aaApiKey}
+              onChange={setAaApiKey}
+              onSubmit={handleAaKeySubmit}
+              mask="*"
+              placeholder="Cole a key ou Enter para pular"
+            />
+          </Box>
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>Obtenha em artificialanalysis.ai/login — Enter vazio para pular</Text>
         </Box>
       </Box>
     );
@@ -155,33 +206,41 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
             <Text color="green"><Spinner type="dots" /></Text>
             <Text>Carregando modelos da OpenRouter...</Text>
           </Box>
+          {aaApiKey && aaState.status === 'loading' && (
+            <Box gap={1} marginTop={1}>
+              <Text color="green"><Spinner type="dots" /></Text>
+              <Text>Carregando benchmarks da Artificial Analysis...</Text>
+            </Box>
+          )}
         </Box>
       </Box>
     );
   }
 
-  const allModels = modelsState.status === 'loaded' ? modelsState.models : [];
-
   // Step: Planner Model
   if (step === 'planner-model') {
+    const hasAA = aaState.status === 'loaded';
     return (
-      <ModelTable
-        models={allModels}
+      <EnhancedModelTable
+        models={enrichedModels}
         onSelect={handlePlannerSelect}
-        title={`Modelo Planner (${allModels.length} modelos da OpenRouter)`}
+        title={`Modelo Planner (${enrichedModels.length} modelos${hasAA ? ' + benchmarks AA' : ''})`}
+        hasAAData={hasAA}
       />
     );
   }
 
   // Step: Worker Model
   if (step === 'worker-model') {
+    const hasAA = aaState.status === 'loaded';
     return (
       <Box flexDirection="column">
         <ModelSummary label="Planner" modelId={plannerModelId} />
-        <ModelTable
-          models={allModels}
+        <EnhancedModelTable
+          models={enrichedModels}
           onSelect={handleWorkerSelect}
-          title={`Modelo Worker (${allModels.length} modelos da OpenRouter)`}
+          title={`Modelo Worker (${enrichedModels.length} modelos${hasAA ? ' + benchmarks AA' : ''})`}
+          hasAAData={hasAA}
         />
       </Box>
     );

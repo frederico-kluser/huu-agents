@@ -9,12 +9,16 @@
 
 import { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
+import Spinner from 'ink-spinner';
 import SelectInput from 'ink-select-input';
-import { ModelSelector } from '../components/model-selector.js';
+import { EnhancedModelTable } from '../components/enhanced-model-table.js';
 import { ProfileBuilderScreen } from './profile-builder-screen.js';
 import { AiPipelineBuilderScreen } from './ai-pipeline-builder-screen.js';
+import { useModels } from '../hooks/use-models.js';
+import { useArtificialAnalysis } from '../hooks/use-artificial-analysis.js';
+import { buildEnrichedModels } from '../data/enriched-model.js';
+import type { EnrichedModel } from '../data/enriched-model.js';
 import { findModel, formatPrice } from '../data/models.js';
-import type { ModelEntry } from '../data/models.js';
 import type { Config } from '../schemas/config.schema.js';
 import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
 import { validateProfileReferences } from '../schemas/worker-profile.schema.js';
@@ -59,8 +63,16 @@ export const OptionsScreen = ({
 }: OptionsScreenProps) => {
   const [phase, setPhase] = useState<OptionsPhase>('menu');
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const { state: modelsState } = useModels(config.openrouterApiKey);
+  const { state: aaState } = useArtificialAnalysis(config.artificialAnalysisApiKey);
 
-  const handlePlannerSelect = useCallback((model: ModelEntry) => {
+  const enrichedModels = buildEnrichedModels(
+    modelsState.status === 'loaded' ? modelsState.models : [],
+    aaState.status === 'loaded' ? aaState.models : [],
+  );
+  const hasAAData = aaState.status === 'loaded';
+
+  const handlePlannerSelect = useCallback((model: EnrichedModel) => {
     const updated: Config = {
       ...config,
       plannerModel: model.id,
@@ -71,7 +83,7 @@ export const OptionsScreen = ({
     setPhase('menu');
   }, [config, onConfigChange]);
 
-  const handleWorkerSelect = useCallback((model: ModelEntry) => {
+  const handleWorkerSelect = useCallback((model: EnrichedModel) => {
     const updated: Config = {
       ...config,
       workerModel: model.id,
@@ -99,24 +111,49 @@ export const OptionsScreen = ({
     setPhase('menu');
   }, [projectRoot]);
 
-  // --- Planner model selection (uses ModelSelector DRY component) ---
+  // --- Loading models ---
+  if ((phase === 'planner-model' || phase === 'worker-model') && modelsState.status === 'loading') {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box gap={1}>
+          <Text color="green"><Spinner type="dots" /></Text>
+          <Text>Carregando modelos da OpenRouter...</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if ((phase === 'planner-model' || phase === 'worker-model') && modelsState.status === 'error') {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text color="red">Erro ao carregar modelos: {modelsState.error}</Text>
+        <Text dimColor>Pressione ESC para voltar</Text>
+      </Box>
+    );
+  }
+
+  // --- Planner model selection ---
   if (phase === 'planner-model') {
     return (
-      <ModelSelector
-        apiKey={config.openrouterApiKey}
+      <EnhancedModelTable
+        models={enrichedModels}
         onSelect={handlePlannerSelect}
-        title="Selecionar Modelo Planner"
+        onCancel={() => setPhase('menu')}
+        title={`Selecionar Modelo Planner (${enrichedModels.length} modelos${hasAAData ? ' + benchmarks AA' : ''})`}
+        hasAAData={hasAAData}
       />
     );
   }
 
-  // --- Worker model selection (uses ModelSelector DRY component) ---
+  // --- Worker model selection ---
   if (phase === 'worker-model') {
     return (
-      <ModelSelector
-        apiKey={config.openrouterApiKey}
+      <EnhancedModelTable
+        models={enrichedModels}
         onSelect={handleWorkerSelect}
-        title="Selecionar Modelo Worker"
+        onCancel={() => setPhase('menu')}
+        title={`Selecionar Modelo Worker (${enrichedModels.length} modelos${hasAAData ? ' + benchmarks AA' : ''})`}
+        hasAAData={hasAAData}
       />
     );
   }

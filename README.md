@@ -68,12 +68,13 @@ pi-dag -t "Corrigir bug #42" -c src/handlers --planner openai/gpt-5.4
 | Schemas | Zod | validacao de DAG, config, profiles, resultados |
 | Orquestracao | LangChain.js | v1.0+ |
 | Agentes Worker | Pi Coding Agent SDK | v0.60.0+ |
-| Multi-provider LLM | OpenRouter | 18 modelos configuraveis |
+| Multi-provider LLM | OpenRouter | catalogo dinamico de modelos |
+| Benchmarks LLM | Artificial Analysis API | Intelligence Index, Coding, Math, velocidade |
 | Isolamento | Git Worktrees | nativo |
 
 ## Arquitetura
 
-Dois tiers de modelos independentes, ambos selecionaveis pelo usuario via tabela filtravel com 18 modelos (preco, velocidade, SWE-Bench, perf/cost ratio):
+Dois tiers de modelos independentes, ambos selecionaveis pelo usuario via tabela filtravel com scroll horizontal, ordenacao multi-criterio e filtros de benchmark (Intelligence Index, Coding, Math, GPQA, HLE, custo-beneficio, velocidade):
 
 1. **Planner (Arquiteto):** Modelo de raciocinio pesado para task decomposition. Produz DAG Zod-validado. Usa sub-agente ReAct Explorer quando precisa de contexto adicional.
 2. **Workers (Operarios):** Modelos rapidos que executam subtasks em worktrees isoladas. System prompts adaptados por provider (XML Claude, Markdown GPT). Auto-commit + merge automatico.
@@ -214,13 +215,25 @@ StatusBar sempre visivel no topo mostra modelos atuais (informacional, sem botao
 +---------------------------------------------------------------------------+
 ```
 
-18 modelos de 10 providers disponiveis via `[o] opcoes`, com filtro, velocidade, preco e benchmarks:
+Catalogo dinamico de modelos via OpenRouter API, com tabela avancada acessivel via `[o] opcoes`:
 
-| Tier | Modelos | Range preco (in/out) |
-|------|---------|---------------------|
-| Planner | Opus 4.6, GPT-5.4, Gemini 3.1 Pro, Codex 5.3 | $1.75-$5.00 / $12-$25 |
-| Both | MiniMax M2.5, Sonnet 4.6, Haiku 4.5, Kimi K2.5, DeepSeek V3.2 | $0.15-$3.00 / $0.42-$15 |
-| Worker | MiMo-V2, Step 3.5, Devstral S2, Gemini Flash, Grok, Qwen3 + 3 mais | $0.10-$0.50 / $0.30-$3.00 |
+| Feature | Descricao |
+|---------|-----------|
+| Scroll horizontal | h/l para ver todas as colunas (benchmarks, velocidade, custo-beneficio) |
+| Ordenacao | s para ciclar criterio (preco, intel, code, math, I/$, tok/s), S para inverter |
+| Filtros preset | f para ciclar: todos, com benchmarks, intel >= 40, I/$ >= 20, > 80 tok/s |
+| Filtro texto | Busca por nome, provider, id ou tokenizer em tempo real |
+| Benchmarks AA | Intelligence Index, Coding, Math, MMLU-Pro, GPQA, HLE, LiveCodeBench, SciCode, MATH-500, AIME |
+| Velocidade AA | Tokens/s (mediana P50), Time-to-First-Token |
+| Custo-beneficio | I/$ = Intelligence Index / preco blended — maior = melhor |
+
+### Artificial Analysis (opcional)
+
+Ao configurar uma API key da [Artificial Analysis](https://artificialanalysis.ai/), a tabela de modelos e enriquecida com benchmarks independentes, metricas de velocidade e custo-beneficio calculado. A key e solicitada durante o setup inicial e pode ser adicionada depois.
+
+| Campo config | Descricao |
+|-------------|-----------|
+| `artificialAnalysisApiKey` | API key da Artificial Analysis (opcional, gratuita, 1000 req/dia) |
 
 Qualquer modelo pode ser usado como planner ou worker — a divisao por tier e apenas sugestao.
 
@@ -232,7 +245,10 @@ src/
 ├── cli-args.ts                      # Parser de argumentos CLI
 ├── app.tsx                          # Router de telas + StatusBar + [o] opcoes
 ├── data/
-│   └── models.ts                    # Catalogo de 18 modelos (preco, bench, speed)
+│   ├── models.ts                    # Catalogo dinamico de modelos (OpenRouter API)
+│   ├── openrouter-client.ts         # Client HTTP + cache para OpenRouter /models
+│   ├── artificial-analysis-client.ts # Client HTTP + cache para Artificial Analysis API
+│   └── enriched-model.ts            # Tipo enriquecido: OpenRouter + AA benchmarks
 ├── schemas/
 │   ├── dag.schema.ts                # DAG output do Planner (Zod)
 │   ├── config.schema.ts             # ~/.pi-dag-cli.json (Zod, selectedAgents + legado)
@@ -241,7 +257,7 @@ src/
 │   ├── worker-pipeline-state.schema.ts  # Estado efemero de runtime do pipeline
 │   └── errors.ts                    # Mensagens de erro de config
 ├── screens/
-│   ├── config-screen.tsx            # Config API key + selecao de modelos (setup inicial)
+│   ├── config-screen.tsx            # Config API keys (OpenRouter + AA) + selecao de modelos
 │   ├── context-screen.tsx           # Selecao de arquivos/dirs
 │   ├── task-screen.tsx              # Input da macro-task
 │   ├── options-screen.tsx           # [o] Opcoes: modelos, AI builder, pipeline manual
@@ -253,7 +269,8 @@ src/
 │   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
 │   └── diff-screen.tsx              # Diff completo da branch
 ├── components/
-│   ├── model-table.tsx              # Tabela filtravel de 18 modelos
+│   ├── model-table.tsx              # Tabela basica de modelos OpenRouter
+│   ├── enhanced-model-table.tsx     # Tabela avancada com scroll horizontal, sort, benchmarks AA
 │   ├── status-bar.tsx               # Barra informacional de modelos atuais
 │   ├── pipeline-trace.tsx           # Trace step-by-step de execucao de pipeline
 │   ├── dag-node-row.tsx             # Linha de no do DAG
@@ -294,13 +311,15 @@ src/
 │   ├── use-config.ts                # Persistencia de config
 │   ├── use-file-tree.ts             # Listagem de arquivos
 │   ├── use-api-validation.ts        # Validacao de API key
-│   └── use-elapsed-time.ts          # Timer de execucao
+│   ├── use-elapsed-time.ts          # Timer de execucao
+│   ├── use-models.ts                # Carregamento async de modelos OpenRouter
+│   └── use-artificial-analysis.ts   # Carregamento async de benchmarks AA
 └── utils/
     ├── file-tree.ts                 # Arvore de arquivos (git ls-files)
     └── path-guard.ts                # Protecao contra path traversal
 ```
 
-58 arquivos, ~7.500 LOC (media ~129 LOC/arquivo).
+62 arquivos, ~8.500 LOC (~137 LOC/arquivo).
 
 ## Padroes de codigo
 
@@ -327,7 +346,8 @@ A configuracao e persistida em `~/.pi-dag-cli.json` e inclui:
 
 | Campo | Tipo | Default | Descricao |
 |-------|------|---------|-----------|
-| `openrouterApiKey` | string | — | Chave de API do OpenRouter |
+| `openrouterApiKey` | string | — | Chave de API do OpenRouter (obrigatoria) |
+| `artificialAnalysisApiKey` | string? | — | Chave da Artificial Analysis (opcional, habilita benchmarks) |
 | `selectedAgents` | `{ planner, worker }` | GPT-4.1 / GPT-4.1-mini | Modelos para planner e workers |
 | `maxConcurrency` | number (1-16) | 4 | Workers paralelos por wave do DAG |
 | `worktreeBasePath` | string | `.pi-dag-worktrees` | Diretorio base para worktrees |

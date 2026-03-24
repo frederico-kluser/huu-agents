@@ -1,16 +1,16 @@
 /**
  * Tela de criação de pipeline via IA.
- * O usuário descreve o que quer, a LLM gera o pipeline completo.
- * Escolhas do usuário: escopo (local/global), seats, e modelo LLM.
+ * O usuário descreve o que quer em textarea multilinha,
+ * a LLM gera o pipeline completo.
  *
- * Fluxo: input → gerando → preview → salvo/erro
+ * Fluxo: input → scope → seats → generating → preview → salvo/erro
+ * Na fase input apenas ESC funciona. Submissão via Enter duplo.
  *
  * @module
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-import TextInput from 'ink-text-input';
 import Spinner from 'ink-spinner';
 import SelectInput from 'ink-select-input';
 import { generatePipeline } from '../services/ai-pipeline-generator.js';
@@ -53,8 +53,8 @@ const SEATS_ITEMS = Array.from({ length: 8 }, (_, i) => ({
 
 /**
  * Tela de criação de pipeline assistida por IA.
- * O usuário descreve o pipeline desejado em linguagem natural,
- * escolhe escopo e seats, e a LLM gera automaticamente.
+ * Textarea multilinha na fase de input — apenas ESC funciona como atalho.
+ * Submissão via Enter duplo (linha vazia após conteúdo).
  *
  * @example
  * <AiPipelineBuilderScreen
@@ -79,20 +79,10 @@ export function AiPipelineBuilderScreen({
   const [generatedProfile, setGeneratedProfile] = useState<WorkerProfile | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Keybindings globais: ESC cancela, [m] troca modelo na fase input
-  useInput((input, key) => {
-    if (key.escape && phase !== 'generating') {
-      onCancel();
-    }
-    if (input === 'm' && phase === 'input' && models.length > 0) {
-      setPhase('model-select');
-    }
-  });
-
-  const handleDescriptionSubmit = useCallback(() => {
-    if (description.trim().length < 5) return;
+  const handleModelSelect = useCallback((entry: ModelEntry) => {
+    setModel(entry.id);
     setPhase('scope');
-  }, [description]);
+  }, []);
 
   const handleScopeSelect = useCallback((item: { value: ProfileScope }) => {
     setScope(item.value);
@@ -103,11 +93,6 @@ export function AiPipelineBuilderScreen({
     setSeats(item.value);
     startGeneration(description, item.value, scope, model);
   }, [description, scope, model]);
-
-  const handleModelSelect = useCallback((entry: ModelEntry) => {
-    setModel(entry.id);
-    setPhase('input');
-  }, []);
 
   const startGeneration = useCallback(async (
     desc: string,
@@ -136,35 +121,15 @@ export function AiPipelineBuilderScreen({
     }
   }, [apiKey]);
 
-  // ── Input phase ────────────────────────────────────────────────
+  // ── Input phase (multiline, only ESC works) ────────────────────
 
   if (phase === 'input') {
     return (
-      <Box flexDirection="column" padding={1}>
-        <Box borderStyle="round" borderColor="magenta" paddingX={2} paddingY={1} flexDirection="column">
-          <Text bold color="magenta">{'\u{1F916}'} Criar Pipeline com IA</Text>
-          <Text dimColor>Descreva o que voce quer que o pipeline faca.</Text>
-          <Text dimColor>A IA vai gerar os steps, variaveis e fluxo automaticamente.</Text>
-        </Box>
-
-        <Box marginTop={1} flexDirection="column" paddingX={1}>
-          <Text dimColor>Modelo: <Text color="cyan">{model}</Text> <Text dimColor>[m] trocar</Text></Text>
-        </Box>
-
-        <Box marginTop={1} paddingX={1}>
-          <Text bold color="cyan">{'\u276F'} </Text>
-          <TextInput
-            value={description}
-            onChange={setDescription}
-            onSubmit={handleDescriptionSubmit}
-            placeholder="Ex: Gere testes, corrija o codigo e valide ate passar..."
-          />
-        </Box>
-
-        <Box marginTop={1} paddingX={1}>
-          <Text dimColor>[Enter] continuar  |  [m] trocar modelo  |  [ESC] cancelar</Text>
-        </Box>
-      </Box>
+      <MultilineInputPhase
+        model={model}
+        onSubmit={(text) => { setDescription(text); setPhase('scope'); }}
+        onCancel={onCancel}
+      />
     );
   }
 
@@ -180,28 +145,18 @@ export function AiPipelineBuilderScreen({
     );
   }
 
-  // ── Scope selection ────────────────────────────────────────────
+  // ── Scope selection (with [m] to change model) ─────────────────
 
   if (phase === 'scope') {
     return (
-      <Box flexDirection="column" padding={1}>
-        <Box borderStyle="round" borderColor="magenta" paddingX={2} paddingY={1} flexDirection="column">
-          <Text bold color="magenta">{'\u{1F916}'} Criar Pipeline com IA</Text>
-          <Text dimColor>Onde salvar o perfil gerado?</Text>
-        </Box>
-
-        <Box marginTop={1} flexDirection="column" paddingX={1}>
-          <Text dimColor>Descricao: <Text color="white">{description.slice(0, 80)}{description.length > 80 ? '...' : ''}</Text></Text>
-        </Box>
-
-        <Box marginTop={1}>
-          <SelectInput items={SCOPE_ITEMS} onSelect={handleScopeSelect} />
-        </Box>
-
-        <Box paddingX={1}>
-          <Text dimColor>[ESC] cancelar</Text>
-        </Box>
-      </Box>
+      <ScopePhase
+        description={description}
+        model={model}
+        hasModels={models.length > 0}
+        onSelect={handleScopeSelect}
+        onModelChange={() => setPhase('model-select')}
+        onCancel={onCancel}
+      />
     );
   }
 
@@ -209,25 +164,12 @@ export function AiPipelineBuilderScreen({
 
   if (phase === 'seats') {
     return (
-      <Box flexDirection="column" padding={1}>
-        <Box borderStyle="round" borderColor="magenta" paddingX={2} paddingY={1} flexDirection="column">
-          <Text bold color="magenta">{'\u{1F916}'} Criar Pipeline com IA</Text>
-          <Text dimColor>Quantas instancias em paralelo por wave do DAG?</Text>
-        </Box>
-
-        <Box marginTop={1} flexDirection="column" paddingX={1}>
-          <Text dimColor>Descricao: <Text color="white">{description.slice(0, 80)}{description.length > 80 ? '...' : ''}</Text></Text>
-          <Text dimColor>Escopo: <Text color="cyan">{scope}</Text></Text>
-        </Box>
-
-        <Box marginTop={1}>
-          <SelectInput items={SEATS_ITEMS} onSelect={handleSeatsSelect} />
-        </Box>
-
-        <Box paddingX={1}>
-          <Text dimColor>[ESC] cancelar</Text>
-        </Box>
-      </Box>
+      <SeatsPhase
+        description={description}
+        scope={scope}
+        onSelect={handleSeatsSelect}
+        onCancel={onCancel}
+      />
     );
   }
 
@@ -319,10 +261,6 @@ export function AiPipelineBuilderScreen({
         <Text color="red">{errorMessage}</Text>
       </Box>
 
-      <Box marginTop={1} paddingX={1}>
-        <Text dimColor>[r] tentar novamente  |  [ESC] cancelar</Text>
-      </Box>
-
       <ErrorActions
         onRetry={() => startGeneration(description, seats, scope, model)}
         onCancel={onCancel}
@@ -331,7 +269,216 @@ export function AiPipelineBuilderScreen({
   );
 }
 
-// ── Sub-components ─────────────────────────────────────────────────
+// ── Multiline input phase ──────────────────────────────────────────
+
+interface MultilineInputPhaseProps {
+  readonly model: string;
+  readonly onSubmit: (text: string) => void;
+  readonly onCancel: () => void;
+}
+
+/**
+ * Textarea multilinha controlada por useInput.
+ * Apenas ESC funciona como atalho — todo o resto é capturado como texto.
+ * Enter duplo (linha vazia após conteúdo) submete o input.
+ * Suporta paste de conteúdo multilinha.
+ */
+function MultilineInputPhase({ model, onSubmit, onCancel }: MultilineInputPhaseProps) {
+  const [lines, setLines] = useState<readonly string[]>(['']);
+  const lastKeyWasReturn = useRef(false);
+
+  useInput((input, key) => {
+    // ESC é o único atalho ativo durante digitação
+    if (key.escape) {
+      onCancel();
+      return;
+    }
+
+    // Enter: adiciona nova linha ou submete se Enter duplo
+    if (key.return) {
+      if (lastKeyWasReturn.current) {
+        // Enter duplo — submete se há conteúdo
+        const fullText = lines.join('\n').trim();
+        if (fullText.length >= 5) {
+          onSubmit(fullText);
+          return;
+        }
+      }
+      lastKeyWasReturn.current = true;
+      setLines((prev) => [...prev, '']);
+      return;
+    }
+
+    lastKeyWasReturn.current = false;
+
+    // Backspace: remove último caractere ou merge com linha anterior
+    if (key.backspace || key.delete) {
+      setLines((prev) => {
+        const updated = [...prev];
+        const lastIdx = updated.length - 1;
+        const lastLine = updated[lastIdx] ?? '';
+
+        if (lastLine.length > 0) {
+          // Remove último caractere da linha atual
+          updated[lastIdx] = lastLine.slice(0, -1);
+        } else if (updated.length > 1) {
+          // Linha vazia: merge com linha anterior
+          updated.pop();
+        }
+
+        return updated;
+      });
+      return;
+    }
+
+    // Texto normal (inclui paste multilinha)
+    if (input) {
+      // Paste pode conter \n — splitamos em linhas
+      const pastedLines = input.split('\n');
+
+      setLines((prev) => {
+        const updated = [...prev];
+        const lastIdx = updated.length - 1;
+
+        // Primeiro fragmento: append na linha atual
+        updated[lastIdx] = (updated[lastIdx] ?? '') + (pastedLines[0] ?? '');
+
+        // Fragmentos adicionais: novas linhas (caso de paste multilinha)
+        for (let i = 1; i < pastedLines.length; i++) {
+          updated.push(pastedLines[i] ?? '');
+        }
+
+        return updated;
+      });
+    }
+  });
+
+  const displayLines = lines.length === 0 ? [''] : lines;
+  const hasContent = lines.join('').trim().length > 0;
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Box borderStyle="round" borderColor="magenta" paddingX={2} paddingY={1} flexDirection="column">
+        <Text bold color="magenta">{'\u{1F916}'} Criar Pipeline com IA</Text>
+        <Text dimColor>Descreva o que voce quer que o pipeline faca.</Text>
+        <Text dimColor>A IA vai gerar os steps, variaveis e fluxo automaticamente.</Text>
+      </Box>
+
+      <Box marginTop={1} flexDirection="column" paddingX={1}>
+        <Text dimColor>Modelo: <Text color="cyan">{model}</Text> (trocavel na proxima tela)</Text>
+      </Box>
+
+      {/* Textarea area */}
+      <Box
+        marginTop={1}
+        flexDirection="column"
+        borderStyle="single"
+        borderColor={hasContent ? 'cyan' : 'gray'}
+        paddingX={1}
+        minHeight={4}
+      >
+        {displayLines.map((line, i) => (
+          <Text key={i}>
+            {i === displayLines.length - 1
+              ? <Text>{line}<Text color="cyan">{'\u2588'}</Text></Text>
+              : <Text>{line}</Text>
+            }
+          </Text>
+        ))}
+      </Box>
+
+      {!hasContent && (
+        <Box paddingX={1}>
+          <Text dimColor italic>Ex: Gere testes, corrija o codigo e valide ate passar...</Text>
+        </Box>
+      )}
+
+      <Box marginTop={1} paddingX={1}>
+        <Text dimColor>[Enter Enter] enviar  |  [ESC] cancelar</Text>
+      </Box>
+    </Box>
+  );
+}
+
+// ── Scope phase ────────────────────────────────────────────────────
+
+interface ScopePhaseProps {
+  readonly description: string;
+  readonly model: string;
+  readonly hasModels: boolean;
+  readonly onSelect: (item: { value: ProfileScope }) => void;
+  readonly onModelChange: () => void;
+  readonly onCancel: () => void;
+}
+
+/** Seleção de escopo com [m] para trocar modelo */
+function ScopePhase({ description, model, hasModels, onSelect, onModelChange, onCancel }: ScopePhaseProps) {
+  useInput((input, key) => {
+    if (key.escape) onCancel();
+    if (input === 'm' && hasModels) onModelChange();
+  });
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Box borderStyle="round" borderColor="magenta" paddingX={2} paddingY={1} flexDirection="column">
+        <Text bold color="magenta">{'\u{1F916}'} Criar Pipeline com IA</Text>
+        <Text dimColor>Onde salvar o perfil gerado?</Text>
+      </Box>
+
+      <Box marginTop={1} flexDirection="column" paddingX={1}>
+        <Text dimColor>Descricao: <Text color="white">{truncate(description.replace(/\n/g, ' '), 80)}</Text></Text>
+        <Text dimColor>Modelo: <Text color="cyan">{model}</Text></Text>
+      </Box>
+
+      <Box marginTop={1}>
+        <SelectInput items={SCOPE_ITEMS} onSelect={onSelect} />
+      </Box>
+
+      <Box paddingX={1}>
+        <Text dimColor>[m] trocar modelo  |  [ESC] cancelar</Text>
+      </Box>
+    </Box>
+  );
+}
+
+// ── Seats phase ────────────────────────────────────────────────────
+
+interface SeatsPhaseProps {
+  readonly description: string;
+  readonly scope: ProfileScope;
+  readonly onSelect: (item: { value: number }) => void;
+  readonly onCancel: () => void;
+}
+
+function SeatsPhase({ description, scope, onSelect, onCancel }: SeatsPhaseProps) {
+  useInput((_input, key) => {
+    if (key.escape) onCancel();
+  });
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Box borderStyle="round" borderColor="magenta" paddingX={2} paddingY={1} flexDirection="column">
+        <Text bold color="magenta">{'\u{1F916}'} Criar Pipeline com IA</Text>
+        <Text dimColor>Quantas instancias em paralelo por wave do DAG?</Text>
+      </Box>
+
+      <Box marginTop={1} flexDirection="column" paddingX={1}>
+        <Text dimColor>Descricao: <Text color="white">{truncate(description.replace(/\n/g, ' '), 80)}</Text></Text>
+        <Text dimColor>Escopo: <Text color="cyan">{scope}</Text></Text>
+      </Box>
+
+      <Box marginTop={1}>
+        <SelectInput items={SEATS_ITEMS} onSelect={onSelect} />
+      </Box>
+
+      <Box paddingX={1}>
+        <Text dimColor>[ESC] cancelar</Text>
+      </Box>
+    </Box>
+  );
+}
+
+// ── Preview / Error actions ────────────────────────────────────────
 
 /** Ações na tela de preview: salvar, regenerar, cancelar */
 function PreviewActions({ onSave, onRetry, onCancel }: {
@@ -362,7 +509,11 @@ function ErrorActions({ onRetry, onCancel }: {
     if (key.escape) onCancel();
   });
 
-  return null; // keybindings only, text already rendered in parent
+  return (
+    <Box marginTop={1} paddingX={1}>
+      <Text dimColor>[r] tentar novamente  |  [ESC] cancelar</Text>
+    </Box>
+  );
 }
 
 // ── Helpers ────────────────────────────────────────────────────────

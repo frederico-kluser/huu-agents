@@ -1,9 +1,11 @@
 /**
  * Tabela avancada de modelos LLM com:
- * - Scroll horizontal (h/l ou setas) para ver todas as colunas
- * - Ordenacao por qualquer coluna (s para ciclar, S para inverter)
- * - Filtros por texto, benchmark minimo, custo-beneficio
- * - Dados de benchmark da Artificial Analysis quando disponiveis
+ * - Filtros compostos: $metrica>=valor e texto, concatenados com | (OR)
+ * - Modo visual de filtros (F) para compor filtros interativamente
+ * - Scroll horizontal (←→) e vertical (↑↓, Shift/PgUp/PgDn para paginar)
+ * - Ordenacao por qualquer coluna (s/S)
+ * - Footer com legendas coloridas dos benchmarks
+ * - Header e footer sempre visiveis, altura da tabela variavel
  *
  * @module
  */
@@ -13,6 +15,10 @@ import { Box, Text, useInput, useStdout } from 'ink';
 import TextInput from 'ink-text-input';
 import type { EnrichedModel } from '../data/enriched-model.js';
 import { formatPrice, formatContext } from '../data/models.js';
+import {
+  parseFilterString, matchesCompositeFilter, segmentsToString,
+  METRIC_NAMES, type FilterSegment,
+} from './filter-parser.js';
 
 // ── Column definitions ──────────────────────────────────────────────
 
@@ -58,42 +64,35 @@ const COLUMNS: readonly ColumnDef[] = [
   // ── Base (always visible) ──
   {
     key: 'name', label: 'Nome', width: 26, align: 'left', group: 'base',
-    getValue: () => null,
-    format: (m) => m.name.slice(0, 25),
+    getValue: () => null, format: (m) => m.name.slice(0, 25),
   },
   {
     key: 'provider', label: 'Provider', width: 12, align: 'left', group: 'base',
-    getValue: () => null,
-    format: (m) => m.provider.slice(0, 11),
+    getValue: () => null, format: (m) => m.provider.slice(0, 11),
   },
   {
     key: 'context', label: 'Ctx', width: 6, align: 'right', group: 'base',
-    getValue: (m) => m.contextWindow,
-    format: (m) => formatContext(m.contextWindow),
+    getValue: (m) => m.contextWindow, format: (m) => formatContext(m.contextWindow),
     color: (m) => m.contextWindow >= 200 ? 'green' : m.contextWindow >= 100 ? 'yellow' : undefined,
   },
   {
     key: 'inputPrice', label: '$In/M', width: 8, align: 'right', group: 'base',
-    getValue: (m) => m.inputPrice,
-    format: (m) => formatPrice(m.inputPrice),
+    getValue: (m) => m.inputPrice, format: (m) => formatPrice(m.inputPrice),
     color: (m) => priceColor(m.inputPrice),
   },
   {
     key: 'outputPrice', label: '$Out/M', width: 8, align: 'right', group: 'base',
-    getValue: (m) => m.outputPrice,
-    format: (m) => formatPrice(m.outputPrice),
+    getValue: (m) => m.outputPrice, format: (m) => formatPrice(m.outputPrice),
     color: (m) => priceColor(m.outputPrice),
   },
   {
     key: 'tools', label: 'Tools', width: 5, align: 'right', group: 'base',
-    getValue: (m) => m.hasTools ? 1 : 0,
-    format: (m) => m.hasTools ? 'Y' : '-',
+    getValue: (m) => m.hasTools ? 1 : 0, format: (m) => m.hasTools ? 'Y' : '-',
     color: (m) => m.hasTools ? 'green' : undefined,
   },
   {
     key: 'reasoning', label: 'Reas', width: 5, align: 'right', group: 'base',
-    getValue: (m) => m.hasReasoning ? 1 : 0,
-    format: (m) => m.hasReasoning ? 'Y' : '-',
+    getValue: (m) => m.hasReasoning ? 1 : 0, format: (m) => m.hasReasoning ? 'Y' : '-',
     color: (m) => m.hasReasoning ? 'green' : undefined,
   },
   // ── Benchmarks (AA data) ──
@@ -203,7 +202,7 @@ const SORT_CYCLE: readonly SortKey[] = [
   'tokensPerSec', 'mmluPro', 'gpqa', 'hle', 'livecodebench', 'context',
 ];
 
-// ── Filter modes ────────────────────────────────────────────────────
+// ── Filter presets ──────────────────────────────────────────────────
 
 type FilterMode = 'none' | 'has-benchmarks' | 'high-intel' | 'best-value' | 'fast';
 
@@ -225,7 +224,10 @@ const pad = (str: string, len: number): string =>
 const padR = (str: string, len: number): string =>
   str.length >= len ? str.slice(0, len) : ' '.repeat(len - str.length) + str;
 
-const HEADER_LINES = 8;
+type UIMode = 'table' | 'filter-input' | 'visual-filter';
+
+/** Linhas reservadas para header (5) + col header (2) + footer (5) + padding (2) */
+const OVERHEAD_LINES = 14;
 
 // ── Props ───────────────────────────────────────────────────────────
 
@@ -239,17 +241,11 @@ interface EnhancedModelTableProps {
 }
 
 /**
- * Tabela avancada de selecao de modelos com scroll horizontal,
- * ordenacao multi-criterio, filtros de benchmark e dados AA.
+ * Tabela avancada de selecao de modelos com filtros compostos,
+ * scroll horizontal/vertical, ordenacao e modo visual de filtros.
  *
- * Keybindings:
- * - j/k ou setas: navegar verticalmente
- * - h/l ou Shift+setas: scroll horizontal (colunas)
- * - s: ciclar ordenacao (preco, intel, code, math, custo-beneficio, velocidade)
- * - S (shift+s): inverter direcao da ordenacao
- * - f: ativar filtro de texto (ESC/Enter para sair)
- * - p: ciclar filtro preset (todos, com benchmarks, high intel, best value, fast)
- * - Enter: selecionar modelo
+ * Navegacao: ↑↓ (item), Shift+↑↓ ou PgUp/PgDn (pagina), ←→ (colunas)
+ * Filtro: f (texto com $metrica>=valor|texto), F (visual), p (preset)
  *
  * @example
  * ```tsx
@@ -257,22 +253,25 @@ interface EnhancedModelTableProps {
  * ```
  */
 export const EnhancedModelTable = ({
-  models,
-  onSelect,
-  title,
-  hasAAData,
-  onCancel,
+  models, onSelect, title, hasAAData, onCancel,
 }: EnhancedModelTableProps) => {
   const [filter, setFilter] = useState('');
-  const [filterActive, setFilterActive] = useState(false);
+  const [mode, setMode] = useState<UIMode>('table');
   const [cursor, setCursor] = useState(0);
   const [colOffset, setColOffset] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>('inputPrice');
   const [sortAsc, setSortAsc] = useState(true);
   const [filterMode, setFilterMode] = useState<FilterMode>('none');
+  // Visual filter builder state
+  const [vfCursor, setVfCursor] = useState(0);
+  const [vfAdding, setVfAdding] = useState(false);
+  const [vfNewText, setVfNewText] = useState('');
+  const [vfSegments, setVfSegments] = useState<FilterSegment[]>([]);
+
   const { stdout } = useStdout();
   const termCols = stdout?.columns ?? 120;
-  const maxRows = Math.max(3, (stdout?.rows ?? 24) - HEADER_LINES);
+  const termRows = stdout?.rows ?? 24;
+  const maxRows = Math.max(3, termRows - OVERHEAD_LINES);
 
   // Colunas visiveis: base sempre + benchmark/speed apenas com AA data
   const availableCols = useMemo(() =>
@@ -294,46 +293,33 @@ export const EnhancedModelTable = ({
 
   const maxColOffset = Math.max(0, availableCols.length - visibleCols.length);
 
-  // Filtrar por texto + preset
+  // Parse composite filter segments
+  const filterSegments = useMemo(() => parseFilterString(filter), [filter]);
+
+  // Filtrar por filtro composto + preset
   const filtered = useMemo(() => {
     let result = [...models];
-
-    // Filtro de texto
-    if (filter.trim()) {
-      const q = filter.toLowerCase();
-      result = result.filter(
-        (m) =>
-          m.name.toLowerCase().includes(q) ||
-          m.provider.toLowerCase().includes(q) ||
-          m.id.toLowerCase().includes(q) ||
-          m.tokenizer.toLowerCase().includes(q) ||
-          (m.aa.creatorSlug?.toLowerCase().includes(q) ?? false),
-      );
+    // Filtro composto (semantica OR entre segmentos)
+    if (filterSegments.length > 0) {
+      result = result.filter((m) => matchesCompositeFilter(m, filterSegments));
     }
-
-    // Filtro preset
+    // Filtro preset (AND com o composto)
     switch (filterMode) {
       case 'has-benchmarks':
-        result = result.filter((m) => m.aa.matched);
-        break;
+        result = result.filter((m) => m.aa.matched); break;
       case 'high-intel':
-        result = result.filter((m) => (m.aa.benchmarks.intelligenceIndex ?? 0) >= 40);
-        break;
-      case 'best-value': {
+        result = result.filter((m) => (m.aa.benchmarks.intelligenceIndex ?? 0) >= 40); break;
+      case 'best-value':
         result = result.filter((m) => {
           const intel = m.aa.benchmarks.intelligenceIndex;
           const price = m.aa.pricing.blended3to1 ?? (m.inputPrice * 0.75 + m.outputPrice * 0.25);
           return intel !== null && price > 0 && intel / price >= 20;
-        });
-        break;
-      }
+        }); break;
       case 'fast':
-        result = result.filter((m) => (m.aa.speed.outputTokensPerSecond ?? 0) > 80);
-        break;
+        result = result.filter((m) => (m.aa.speed.outputTokensPerSecond ?? 0) > 80); break;
     }
-
     return result;
-  }, [models, filter, filterMode]);
+  }, [models, filterSegments, filterMode]);
 
   // Ordenar
   const sorted = useMemo(() => {
@@ -342,12 +328,10 @@ export const EnhancedModelTable = ({
     return [...filtered].sort((a, b) => {
       const va = col.getValue(a);
       const vb = col.getValue(b);
-      // Nulls always go to the end
       if (va === null && vb === null) return 0;
       if (va === null) return 1;
       if (vb === null) return -1;
-      const diff = va - vb;
-      return sortAsc ? diff : -diff;
+      return sortAsc ? va - vb : vb - va;
     });
   }, [filtered, sortKey, sortAsc, availableCols]);
 
@@ -355,48 +339,48 @@ export const EnhancedModelTable = ({
   const scrollOffset = Math.max(0, safeCursor - maxRows + 1);
   const visible = sorted.slice(scrollOffset, scrollOffset + maxRows);
 
-  // Navigation mode: keys control table (active when filter is NOT focused)
+  // ── Table mode input (↑↓←→, Shift+↑↓, PgUp/PgDn, s, S, f, F, p, Enter, ESC)
   useInput((input, key) => {
-    // ESC to cancel
-    if (key.escape && onCancel) {
-      onCancel();
+    if (key.escape && onCancel) { onCancel(); return; }
+
+    // Abrir filtro texto
+    if (input === 'f' && !key.shift) { setMode('filter-input'); return; }
+
+    // Abrir filtro visual
+    if (input === 'F' || (input === 'f' && key.shift)) {
+      setVfSegments([...parseFilterString(filter)]);
+      setVfCursor(0);
+      setVfAdding(false);
+      setMode('visual-filter');
       return;
     }
 
-    // f activates filter text input
-    if (input === 'f') {
-      setFilterActive(true);
-      return;
+    // Navegacao vertical: ↑↓ (1 item), Shift+↑↓ ou PgUp/PgDn (1 pagina)
+    if (key.downArrow) {
+      const step = key.shift ? maxRows : 1;
+      setCursor((c) => Math.min(c + step, sorted.length - 1));
     }
+    if (key.upArrow) {
+      const step = key.shift ? maxRows : 1;
+      setCursor((c) => Math.max(c - step, 0));
+    }
+    if (key.pageDown) setCursor((c) => Math.min(c + maxRows, sorted.length - 1));
+    if (key.pageUp) setCursor((c) => Math.max(c - maxRows, 0));
 
-    // Vertical navigation
-    if (input === 'j' || key.downArrow) {
-      setCursor((c) => Math.min(c + 1, sorted.length - 1));
-    }
-    if (input === 'k' || key.upArrow) {
-      setCursor((c) => Math.max(c - 1, 0));
-    }
+    // Scroll horizontal de colunas: ←→
+    if (key.rightArrow) setColOffset((c) => Math.min(c + 1, maxColOffset));
+    if (key.leftArrow) setColOffset((c) => Math.max(c - 1, 0));
 
-    // Horizontal scroll
-    if (input === 'l' || (key.rightArrow && key.shift)) {
-      setColOffset((c) => Math.min(c + 1, maxColOffset));
-    }
-    if (input === 'h' || (key.leftArrow && key.shift)) {
-      setColOffset((c) => Math.max(c - 1, 0));
-    }
-
-    // Sort cycling
+    // Ciclar ordenacao
     if (input === 's' && !key.shift) {
       setSortKey((prev) => {
         const idx = SORT_CYCLE.indexOf(prev);
         return SORT_CYCLE[(idx + 1) % SORT_CYCLE.length]!;
       });
     }
-    if (input === 'S' || (input === 's' && key.shift)) {
-      setSortAsc((prev) => !prev);
-    }
+    if (input === 'S' || (input === 's' && key.shift)) setSortAsc((prev) => !prev);
 
-    // Filter preset cycling
+    // Ciclar preset filter
     if (input === 'p') {
       setFilterMode((prev) => {
         const idx = FILTER_CYCLE.indexOf(prev);
@@ -405,22 +389,107 @@ export const EnhancedModelTable = ({
       setCursor(0);
     }
 
-    // Select
-    if (key.return && sorted[safeCursor]) {
-      onSelect(sorted[safeCursor]!);
-    }
-  }, { isActive: !filterActive });
+    // Selecionar modelo
+    if (key.return && sorted[safeCursor]) onSelect(sorted[safeCursor]!);
+  }, { isActive: mode === 'table' });
 
-  // Filter input mode: ESC or Enter exits filter
+  // ── Filter text input exit (ESC/Enter volta ao modo tabela)
   useInput((_input, key) => {
+    if (key.escape || key.return) { setMode('table'); setCursor(0); }
+  }, { isActive: mode === 'filter-input' });
+
+  // ── Visual filter navigation (↑↓, d/Delete, a, ESC/Enter)
+  useInput((input, key) => {
     if (key.escape || key.return) {
-      setFilterActive(false);
+      setFilter(segmentsToString(vfSegments));
+      setMode('table');
       setCursor(0);
+      return;
     }
-  }, { isActive: filterActive });
+    if (key.upArrow) setVfCursor((c) => Math.max(c - 1, 0));
+    if (key.downArrow) setVfCursor((c) => Math.min(c + 1, vfSegments.length - 1));
+    if ((input === 'd' || key.delete || key.backspace) && vfSegments.length > 0) {
+      const idx = Math.min(vfCursor, vfSegments.length - 1);
+      setVfSegments((prev) => prev.filter((_, i) => i !== idx));
+      setVfCursor((c) => Math.min(c, Math.max(0, vfSegments.length - 2)));
+    }
+    if (input === 'a') { setVfAdding(true); setVfNewText(''); }
+  }, { isActive: mode === 'visual-filter' && !vfAdding });
+
+  // ── Visual filter add segment (ESC cancela, Enter adiciona)
+  useInput((_input, key) => {
+    if (key.escape) { setVfAdding(false); setVfNewText(''); return; }
+    if (key.return && vfNewText.trim()) {
+      const newSegs = parseFilterString(vfNewText.trim());
+      setVfSegments((prev) => [...prev, ...newSegs]);
+      setVfAdding(false);
+      setVfNewText('');
+    }
+  }, { isActive: mode === 'visual-filter' && vfAdding });
 
   const sortLabel = availableCols.find((c) => c.key === sortKey)?.label ?? sortKey;
 
+  // ── Render: Visual filter builder ─────────────────────────────────
+  if (mode === 'visual-filter') {
+    const safeVfCursor = Math.min(vfCursor, Math.max(0, vfSegments.length - 1));
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box borderStyle="round" borderColor="yellow" paddingX={2} flexDirection="column">
+          <Text bold color="yellow">Filtros Compostos (modo visual)</Text>
+          <Box marginTop={1} gap={2}>
+            <Text><Text color="cyan">↑↓</Text><Text dimColor>:navegar</Text></Text>
+            <Text><Text color="red">d</Text><Text dimColor>:remover</Text></Text>
+            <Text><Text color="green">a</Text><Text dimColor>:adicionar</Text></Text>
+            <Text><Text color="white">ESC/Enter</Text><Text dimColor>:aplicar</Text></Text>
+          </Box>
+          <Text dimColor>Metricas: {METRIC_NAMES.join(', ')}</Text>
+          <Text dimColor>Formato: $metrica{'>'}=valor (ex: $Intel{'>'}=40, $MMLU{'>'}=60)</Text>
+        </Box>
+
+        <Box flexDirection="column" marginTop={1}>
+          {vfSegments.length === 0 && !vfAdding && (
+            <Text dimColor>Nenhum filtro ativo. Pressione &apos;a&apos; para adicionar.</Text>
+          )}
+          {vfSegments.map((seg, i) => {
+            const active = i === safeVfCursor;
+            const label = seg.type === 'metric'
+              ? `${seg.raw}`
+              : `"${seg.query}"`;
+            return (
+              <Box key={`${seg.raw}-${i}`}>
+                <Text
+                  backgroundColor={active ? 'yellow' : undefined}
+                  color={active ? 'black' : seg.type === 'metric' ? 'cyan' : 'green'}
+                >
+                  {active ? ' \u25B8 ' : '   '}{label}
+                </Text>
+                <Text dimColor> ({seg.type === 'metric' ? 'metrica' : 'texto'})</Text>
+              </Box>
+            );
+          })}
+        </Box>
+
+        {vfAdding && (
+          <Box marginTop={1}>
+            <Text color="green" bold>Novo filtro: </Text>
+            <TextInput
+              value={vfNewText}
+              onChange={setVfNewText}
+              focus={true}
+              placeholder="$Intel>=40, $MMLU>=60, gpt..."
+            />
+          </Box>
+        )}
+
+        <Box marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
+          <Text dimColor>Preview: </Text>
+          <Text color="white">{segmentsToString(vfSegments) || '(vazio)'}</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  // ── Render: Table ─────────────────────────────────────────────────
   return (
     <Box flexDirection="column" padding={1}>
       {/* Header com filtro e info */}
@@ -428,18 +497,18 @@ export const EnhancedModelTable = ({
         {title && <Text bold color="cyan">{title}</Text>}
         <Box marginTop={1} gap={2}>
           <Box>
-            {filterActive ? (
+            {mode === 'filter-input' ? (
               <>
                 <Text color="green" bold>Filtro: </Text>
                 <TextInput
                   value={filter}
                   onChange={(v) => { setFilter(v); setCursor(0); }}
-                  placeholder="nome, provider, id..."
+                  placeholder="$Intel>=40|gpt|$MMLU>=60..."
                   focus={true}
                 />
               </>
             ) : (
-              <Text dimColor>Filtro: {filter || '(f para digitar)'}</Text>
+              <Text dimColor>Filtro: {filter || '(f para digitar, F visual)'}</Text>
             )}
           </Box>
           <Text dimColor>|</Text>
@@ -449,9 +518,9 @@ export const EnhancedModelTable = ({
         </Box>
       </Box>
 
-      {/* Table */}
+      {/* Tabela de dados */}
       <Box flexDirection="column" marginTop={1}>
-        {/* Header row */}
+        {/* Header das colunas */}
         <Box>
           {visibleCols.map((col, i) => (
             <Text key={col.key} dimColor bold={col.key === sortKey}>
@@ -462,7 +531,7 @@ export const EnhancedModelTable = ({
         </Box>
         <Text dimColor>{'─'.repeat(Math.min(termCols - 4, visibleCols.reduce((s, c) => s + c.width + 1, -1)))}</Text>
 
-        {/* Data rows */}
+        {/* Linhas de dados */}
         {visible.map((m, i) => {
           const idx = scrollOffset + i;
           const active = idx === safeCursor;
@@ -493,17 +562,43 @@ export const EnhancedModelTable = ({
         )}
       </Box>
 
-      {/* Footer */}
+      {/* Footer - 3 linhas com legendas coloridas */}
       <Box marginTop={1} flexDirection="column">
-        <Text dimColor>
-          j/k:navegar  h/l:scroll cols  s:ordenar  S:inverter  f:filtro texto  p:preset  Enter:selecionar  {onCancel ? 'ESC:voltar  ' : ''}{sorted.length}/{models.length}
+        {/* Linha 1: Navegacao + contagem + indicadores de scroll */}
+        <Text>
+          <Text color="cyan">↑↓</Text><Text dimColor>:navegar </Text>
+          <Text color="cyan">Shift+↑↓</Text><Text dimColor>:paginar </Text>
+          <Text color="cyan">←→</Text><Text dimColor>:colunas </Text>
+          <Text color="green">s/S</Text><Text dimColor>:ordenar </Text>
+          <Text color="yellow">f</Text><Text dimColor>:filtro </Text>
+          <Text color="yellow">F</Text><Text dimColor>:visual </Text>
+          <Text color="magenta">p</Text><Text dimColor>:preset </Text>
+          <Text color="white">Enter</Text><Text dimColor>:ok</Text>
+          {onCancel && <Text dimColor> ESC:voltar</Text>}
+          <Text dimColor> </Text>
+          <Text color="white">{sorted.length}/{models.length}</Text>
+          {colOffset > 0 && <Text color="yellow"> ◀</Text>}
+          {colOffset < maxColOffset && <Text color="yellow"> ▶</Text>}
         </Text>
-        {colOffset > 0 && (
-          <Text dimColor color="yellow">{'<'} mais colunas a esquerda</Text>
-        )}
-        {colOffset < maxColOffset && (
-          <Text dimColor color="yellow">{'>'} mais colunas a direita (h/l para scroll)</Text>
-        )}
+        {/* Linha 2: Benchmarks - indices compostos + conhecimento */}
+        <Text>
+          <Text color="yellow">Intel</Text><Text dimColor>=Indice Composto(0-100) </Text>
+          <Text color="yellow">Code</Text><Text dimColor>=Coding(TermBench+Sci) </Text>
+          <Text color="yellow">Math</Text><Text dimColor>=Raciocinio Matematico </Text>
+          <Text color="yellow">MMLU</Text><Text dimColor>=Multi-dominio Pro </Text>
+          <Text color="yellow">GPQA</Text><Text dimColor>=Ciencia PhD </Text>
+          <Text color="yellow">HLE</Text><Text dimColor>=Humanity&apos;s Last Exam</Text>
+        </Text>
+        {/* Linha 3: Benchmarks - codigo + velocidade + custo */}
+        <Text>
+          <Text color="magenta">LCB</Text><Text dimColor>=LiveCodeBench </Text>
+          <Text color="magenta">Sci</Text><Text dimColor>=Codigo Cientifico </Text>
+          <Text color="magenta">M500</Text><Text dimColor>=MATH-500(competicao) </Text>
+          <Text color="magenta">AIME</Text><Text dimColor>=Olimpiada Mat 2025 </Text>
+          <Text color="cyan">Tok/s</Text><Text dimColor>=Velocidade </Text>
+          <Text color="cyan">TTFT</Text><Text dimColor>=Latencia 1o token </Text>
+          <Text color="green">I/$</Text><Text dimColor>=Intel/Preco</Text>
+        </Text>
       </Box>
     </Box>
   );

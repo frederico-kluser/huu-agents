@@ -25,8 +25,8 @@ const OpenRouterArchitectureSchema = z.object({
 });
 
 const OpenRouterTopProviderSchema = z.object({
-  context_length: z.number().default(0),
-  max_completion_tokens: z.number().default(0),
+  context_length: z.number().nullable().default(null),
+  max_completion_tokens: z.number().nullable().default(null),
   is_moderated: z.boolean().default(false),
 });
 

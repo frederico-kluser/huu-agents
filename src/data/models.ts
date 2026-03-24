@@ -51,7 +51,7 @@ export const toModelEntry = (raw: OpenRouterModel): ModelEntry => ({
   contextWindow: Math.round(raw.context_length / 1000),
   inputPrice: tokenPriceToPerMillion(raw.pricing.prompt),
   outputPrice: tokenPriceToPerMillion(raw.pricing.completion),
-  maxCompletionTokens: raw.top_provider.max_completion_tokens,
+  maxCompletionTokens: raw.top_provider.max_completion_tokens ?? 0,
   hasTools: raw.supported_parameters.includes('tools'),
   hasReasoning: raw.supported_parameters.includes('reasoning'),
   isModerated: raw.top_provider.is_moderated,

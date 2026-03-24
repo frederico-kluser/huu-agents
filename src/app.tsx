@@ -47,6 +47,8 @@ interface PipelineState {
   readonly previousScreen: Screen | null;
   readonly retryContext: RetryContext | null;
   readonly activeProfile: WorkerProfile | null;
+  /** Perfil pendente para edicao (via [e] na profile-select ou opcoes) */
+  readonly editingProfile: WorkerProfile | null;
 }
 
 interface AppProps {
@@ -82,7 +84,7 @@ const resolveInitialScreen = (cliArgs?: CliArgs): Screen => {
 const INITIAL_STATE: PipelineState = {
   config: null, contextFiles: [], macroTask: '',
   startTime: 0, result: null, progress: null, previousScreen: null, retryContext: null,
-  activeProfile: null,
+  activeProfile: null, editingProfile: null,
 };
 
 /**
@@ -158,7 +160,7 @@ export const App = ({ cliArgs }: AppProps) => {
 
   const handleOptionsBack = useCallback(() => {
     const target = pipeline.previousScreen ?? 'context';
-    setPipeline((prev) => ({ ...prev, previousScreen: null }));
+    setPipeline((prev) => ({ ...prev, previousScreen: null, editingProfile: null }));
     setScreen(target);
   }, [pipeline.previousScreen]);
 
@@ -181,6 +183,11 @@ export const App = ({ cliArgs }: AppProps) => {
     setPipeline((prev) => ({ ...prev, activeProfile: profile, startTime: Date.now() }));
     setScreen('executing');
   }, []);
+
+  const handleProfileEdit = useCallback((profile: WorkerProfile) => {
+    setPipeline((prev) => ({ ...prev, editingProfile: profile, previousScreen: screen }));
+    setScreen('options');
+  }, [screen]);
 
   useEffect(() => {
     if (screen !== 'executing' || !pipeline.config) return;
@@ -280,6 +287,7 @@ export const App = ({ cliArgs }: AppProps) => {
           onConfigChange={handleOptionsConfigChange}
           onBack={handleOptionsBack}
           projectRoot={process.cwd()}
+          editingProfile={pipeline.editingProfile}
         />
       </Box>
     );
@@ -305,6 +313,7 @@ export const App = ({ cliArgs }: AppProps) => {
         <ProfileSelectScreen
           projectRoot={process.cwd()}
           onSelect={handleProfileSelect}
+          onEdit={handleProfileEdit}
           apiKey={pipeline.config.openrouterApiKey}
         />
       </Box>

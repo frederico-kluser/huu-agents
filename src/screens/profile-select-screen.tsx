@@ -25,6 +25,8 @@ interface ProfileSelectScreenProps {
   readonly projectRoot: string;
   /** Callback com perfil selecionado (com override de modelo) ou null (sem perfil) */
   readonly onSelect: (profile: WorkerProfile | null) => void;
+  /** Callback para editar um perfil (abre builder com perfil existente) */
+  readonly onEdit?: (profile: WorkerProfile) => void;
   /** API key para carregar catálogo de modelos */
   readonly apiKey: string;
 }
@@ -41,7 +43,7 @@ interface ProfileSelectScreenProps {
  *   onSelect={(profile) => startExecution(profile)}
  * />
  */
-export const ProfileSelectScreen = ({ projectRoot, onSelect, apiKey }: ProfileSelectScreenProps) => {
+export const ProfileSelectScreen = ({ projectRoot, onSelect, onEdit, apiKey }: ProfileSelectScreenProps) => {
   const [phase, setPhase] = useState<Phase>('select');
   const [profiles, setProfiles] = useState<readonly WorkerProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +84,12 @@ export const ProfileSelectScreen = ({ projectRoot, onSelect, apiKey }: ProfileSe
           setPendingProfile(profile);
           setPhase('confirm-model');
         }
+      }
+    }
+    if (input === 'e' && onEdit && selectedIdx > 0) {
+      const profile = profiles[selectedIdx - 1];
+      if (profile) {
+        onEdit(profile);
       }
     }
   });
@@ -259,7 +267,7 @@ export const ProfileSelectScreen = ({ projectRoot, onSelect, apiKey }: ProfileSe
 
       {/* Footer */}
       <Box marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
-        <Text dimColor>[j/k] navegar  |  [Enter] selecionar  |  [o] opcoes (criar perfis)</Text>
+        <Text dimColor>[j/k] navegar  |  [Enter] selecionar  |  [e] editar perfil  |  [o] opcoes</Text>
       </Box>
     </Box>
   );

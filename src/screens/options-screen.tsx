@@ -23,10 +23,11 @@ import { findModel, formatPrice } from '../data/models.js';
 import type { Config } from '../schemas/config.schema.js';
 import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
 import { validateProfileReferences } from '../schemas/worker-profile.schema.js';
-import { saveProfile } from '../services/profile-catalog.js';
+import { saveProfile, deleteProfile } from '../services/profile-catalog.js';
 import { saveGlobalCache } from '../services/offline-benchmark-cache.js';
 import { getCachedModels } from '../data/openrouter-client.js';
 import { getCachedAAModels } from '../data/artificial-analysis-client.js';
+import { ProfileListSelector } from '../components/profile-list-selector.js';
 
 type OptionsPhase =
   | 'menu'
@@ -36,6 +37,10 @@ type OptionsPhase =
   | 'planner-model'
   | 'worker-model'
   | 'create-profile'
+  | 'edit-profile-list'
+  | 'edit-profile'
+  | 'delete-profile-list'
+  | 'delete-confirm'
   | 'ai-builder'
   | 'guide'
   | 'edit-openrouter-key'
@@ -50,6 +55,8 @@ interface OptionsScreenProps {
   readonly onBack: () => void;
   /** Raiz do projeto para salvar perfis locais */
   readonly projectRoot: string;
+  /** Perfil para editar diretamente (abre builder imediatamente) */
+  readonly editingProfile?: WorkerProfile | null;
 }
 
 /** Formata nome do modelo com preco compacto */
@@ -79,11 +86,18 @@ export const OptionsScreen = ({
   onConfigChange,
   onBack,
   projectRoot,
+  editingProfile: initialEditingProfile,
 }: OptionsScreenProps) => {
-  const [phase, setPhase] = useState<OptionsPhase>('menu');
+  const [phase, setPhase] = useState<OptionsPhase>(
+    initialEditingProfile ? 'edit-profile' : 'menu',
+  );
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [editingOrKey, setEditingOrKey] = useState(config.openrouterApiKey);
   const [editingAaKey, setEditingAaKey] = useState(config.artificialAnalysisApiKey ?? '');
+  const [pendingEditProfile, setPendingEditProfile] = useState<WorkerProfile | null>(
+    initialEditingProfile ?? null,
+  );
+  const [pendingDeleteProfile, setPendingDeleteProfile] = useState<WorkerProfile | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const { state: modelsState, forceRefresh: refreshOR } = useModels(config.openrouterApiKey);
   const hasAaKey = Boolean(config.artificialAnalysisApiKey);
@@ -190,6 +204,18 @@ export const OptionsScreen = ({
     setSaveMessage(value.trim() ? 'Artificial Analysis API key atualizada' : 'Artificial Analysis API key removida');
     setPhase('keys-menu');
   }, [config, onConfigChange]);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!pendingDeleteProfile) return;
+    const result = await deleteProfile(pendingDeleteProfile.id, pendingDeleteProfile.scope, projectRoot);
+    if (result.ok) {
+      setSaveMessage(`Perfil "${pendingDeleteProfile.id}" deletado com sucesso`);
+    } else {
+      setSaveMessage(`Erro ao deletar: ${result.error.kind}`);
+    }
+    setPendingDeleteProfile(null);
+    setPhase('pipelines-menu');
+  }, [pendingDeleteProfile, projectRoot]);
 
   // --- Loading models ---
   if ((phase === 'planner-model' || phase === 'worker-model') && modelsState.status === 'loading') {
@@ -298,6 +324,69 @@ export const OptionsScreen = ({
     );
   }
 
+  // --- Edit profile list ---
+  if (phase === 'edit-profile-list') {
+    return (
+      <ProfileListSelector
+        projectRoot={projectRoot}
+        title="Editar Pipeline Profile"
+        description="Selecione um perfil para editar seus steps, variaveis e configuracoes."
+        onSelect={(profile) => {
+          setPendingEditProfile(profile);
+          setPhase('edit-profile');
+        }}
+        onBack={() => setPhase('pipelines-menu')}
+      />
+    );
+  }
+
+  // --- Edit profile (builder with existing profile) ---
+  if (phase === 'edit-profile' && pendingEditProfile) {
+    return (
+      <ProfileBuilderScreen
+        existingProfile={pendingEditProfile}
+        onSave={(profile) => {
+          setPendingEditProfile(null);
+          void handleProfileSave(profile);
+        }}
+        onCancel={() => {
+          setPendingEditProfile(null);
+          setPhase('pipelines-menu');
+        }}
+      />
+    );
+  }
+
+  // --- Delete profile list ---
+  if (phase === 'delete-profile-list') {
+    return (
+      <ProfileListSelector
+        projectRoot={projectRoot}
+        title="Deletar Pipeline Profile"
+        description="Selecione um perfil para deletar permanentemente."
+        onSelect={(profile) => {
+          setPendingDeleteProfile(profile);
+          setPhase('delete-confirm');
+        }}
+        onBack={() => setPhase('pipelines-menu')}
+      />
+    );
+  }
+
+  // --- Delete confirm ---
+  if (phase === 'delete-confirm' && pendingDeleteProfile) {
+    return (
+      <DeleteConfirmDialog
+        profile={pendingDeleteProfile}
+        onConfirm={() => void handleDeleteConfirm()}
+        onCancel={() => {
+          setPendingDeleteProfile(null);
+          setPhase('pipelines-menu');
+        }}
+      />
+    );
+  }
+
   // --- Profile builder ---
   if (phase === 'create-profile') {
     return (
@@ -394,18 +483,22 @@ export const OptionsScreen = ({
     return (
       <SubMenu
         title="Pipeline Profiles"
-        description="Crie pipelines multi-step para customizar a execucao dos workers."
+        description="Crie, edite ou delete pipelines multi-step para customizar a execucao dos workers."
         saveMessage={saveMessage}
         onBack={() => { setSaveMessage(null); setPhase('menu'); }}
         items={[
           { label: 'Criar Pipeline com IA (AI Builder)', value: 'ai-builder' },
           { label: 'Criar Pipeline Manual (Wizard)', value: 'create-profile' },
+          { label: 'Editar Pipeline Existente', value: 'edit-profile' },
+          { label: 'Deletar Pipeline', value: 'delete-profile' },
           { label: 'Voltar', value: 'back' },
         ]}
         onSelect={(value) => {
           setSaveMessage(null);
           if (value === 'ai-builder') setPhase('ai-builder');
           else if (value === 'create-profile') setPhase('create-profile');
+          else if (value === 'edit-profile') setPhase('edit-profile-list');
+          else if (value === 'delete-profile') setPhase('delete-profile-list');
           else setPhase('menu');
         }}
       />
@@ -495,6 +588,56 @@ function SubMenu({ title, description, saveMessage, onBack, items, onSelect }: S
 
       <Box paddingX={1}>
         <Text dimColor>[ESC] voltar</Text>
+      </Box>
+    </Box>
+  );
+}
+
+// ── Delete Confirm Dialog ─────────────────────────────────────────────
+
+interface DeleteConfirmDialogProps {
+  readonly profile: WorkerProfile;
+  readonly onConfirm: () => void;
+  readonly onCancel: () => void;
+}
+
+/**
+ * Dialogo de confirmacao para exclusao de perfil.
+ * Mostra resumo do perfil e exige confirmacao explicita.
+ */
+function DeleteConfirmDialog({ profile, onConfirm, onCancel }: DeleteConfirmDialogProps) {
+  useInput((input, key) => {
+    if (key.escape) onCancel();
+    if (input === 'y' || input === 'Y') onConfirm();
+    if (input === 'n' || input === 'N') onCancel();
+  });
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Box borderStyle="round" borderColor="red" paddingX={2} paddingY={1} flexDirection="column">
+        <Text bold color="red">{'\u26A0'} Deletar Pipeline Profile</Text>
+        <Text> </Text>
+        <Text>Tem certeza que deseja deletar o perfil:</Text>
+        <Text> </Text>
+        <Box gap={2}>
+          <Text bold color="white">{profile.id}</Text>
+          <Text dimColor>[{profile.scope === 'project' ? 'local' : 'global'}]</Text>
+        </Box>
+        {profile.description && <Text dimColor>{profile.description}</Text>}
+        <Box gap={2} marginTop={1}>
+          <Text dimColor>Steps: {profile.steps.length}</Text>
+          <Text dimColor>Seats: {profile.seats}</Text>
+        </Box>
+        <Text> </Text>
+        <Text color="red">Esta acao nao pode ser desfeita.</Text>
+      </Box>
+
+      <Box marginTop={1} gap={2} paddingX={1}>
+        <Text color="red" bold>[y]</Text>
+        <Text>Confirmar exclusao</Text>
+        <Text dimColor>|</Text>
+        <Text color="green" bold>[n/ESC]</Text>
+        <Text>Cancelar</Text>
       </Box>
     </Box>
   );

@@ -184,12 +184,14 @@ Perfis de worker definem pipelines declarativas multi-step que substituem a exec
 Atalho `[o]` abre a tela de opcoes de qualquer tela (exceto config inicial, loading e execucao). A legenda `[o] opcoes` aparece no rodape de cada tela junto com as demais keybindings.
 
 A tela de opcoes permite:
-- **Modelo Planner** — selecao individual do catalogo completo de 18 modelos
-- **Modelo Worker** — selecao individual do catalogo completo de 18 modelos
+- **OpenRouter API Key** — alterar a chave de API do OpenRouter
+- **Artificial Analysis Key** — configurar ou remover a chave da Artificial Analysis (habilita benchmarks)
+- **Modelo Planner** — selecao individual com tabela avancada (benchmarks, filtros, ordenacao, ESC para cancelar)
+- **Modelo Worker** — selecao individual com tabela avancada (benchmarks, filtros, ordenacao, ESC para cancelar)
 - **AI Pipeline Builder** — descreva o que deseja e a IA gera a pipeline automaticamente
 - **Criar Pipeline Manual** — wizard visual para montar perfis multi-step
 
-Ao trocar modelo, a mudanca e salva imediatamente e o usuario permanece na tela de opcoes — pode trocar um ou ambos sem sair. Ao criar perfil, o wizard valida referencias antes de salvar.
+Ao trocar modelo ou key, a mudanca e salva imediatamente e o usuario permanece na tela de opcoes. ESC cancela a selecao de modelo e volta ao menu. Ao criar perfil, o wizard valida referencias antes de salvar.
 
 ### AI Pipeline Builder
 
@@ -260,7 +262,7 @@ src/
 │   ├── config-screen.tsx            # Config API keys (OpenRouter + AA) + selecao de modelos
 │   ├── context-screen.tsx           # Selecao de arquivos/dirs
 │   ├── task-screen.tsx              # Input da macro-task
-│   ├── options-screen.tsx           # [o] Opcoes: modelos, AI builder, pipeline manual
+│   ├── options-screen.tsx           # [o] Opcoes: API keys, modelos, AI builder, pipeline manual
 │   ├── profile-select-screen.tsx    # Selecao de perfil antes da execucao
 │   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis (via opcoes)
 │   ├── ai-pipeline-builder-screen.tsx  # Criacao de pipeline via IA (LangChain)

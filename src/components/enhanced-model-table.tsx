@@ -234,6 +234,8 @@ interface EnhancedModelTableProps {
   readonly onSelect: (model: EnrichedModel) => void;
   readonly title?: string;
   readonly hasAAData?: boolean;
+  /** Callback ao pressionar ESC — volta sem selecionar */
+  readonly onCancel?: () => void;
 }
 
 /**
@@ -258,6 +260,7 @@ export const EnhancedModelTable = ({
   onSelect,
   title,
   hasAAData,
+  onCancel,
 }: EnhancedModelTableProps) => {
   const [filter, setFilter] = useState('');
   const [cursor, setCursor] = useState(0);
@@ -351,6 +354,12 @@ export const EnhancedModelTable = ({
   const visible = sorted.slice(scrollOffset, scrollOffset + maxRows);
 
   useInput((input, key) => {
+    // ESC to cancel
+    if (key.escape && onCancel) {
+      onCancel();
+      return;
+    }
+
     // Vertical navigation
     if (input === 'j' || key.downArrow) {
       setCursor((c) => Math.min(c + 1, sorted.length - 1));
@@ -463,7 +472,7 @@ export const EnhancedModelTable = ({
       {/* Footer */}
       <Box marginTop={1} flexDirection="column">
         <Text dimColor>
-          j/k:navegar  h/l:scroll cols  s:ordenar  S:inverter  f:filtro  Enter:selecionar  {sorted.length}/{models.length}
+          j/k:navegar  h/l:scroll cols  s:ordenar  S:inverter  f:filtro  Enter:selecionar  {onCancel ? 'ESC:voltar  ' : ''}{sorted.length}/{models.length}
         </Text>
         {colOffset > 0 && (
           <Text dimColor color="yellow">{'<'} mais colunas a esquerda</Text>

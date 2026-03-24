@@ -10,6 +10,7 @@
 import { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
+import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
 import { EnhancedModelTable } from '../components/enhanced-model-table.js';
 import { ProfileBuilderScreen } from './profile-builder-screen.js';
@@ -24,7 +25,15 @@ import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
 import { validateProfileReferences } from '../schemas/worker-profile.schema.js';
 import { saveProfile } from '../services/profile-catalog.js';
 
-type OptionsPhase = 'menu' | 'planner-model' | 'worker-model' | 'create-profile' | 'ai-builder' | 'guide';
+type OptionsPhase =
+  | 'menu'
+  | 'planner-model'
+  | 'worker-model'
+  | 'create-profile'
+  | 'ai-builder'
+  | 'guide'
+  | 'edit-openrouter-key'
+  | 'edit-aa-key';
 
 interface OptionsScreenProps {
   /** Config atual (para exibir e atualizar modelos) */
@@ -63,8 +72,17 @@ export const OptionsScreen = ({
 }: OptionsScreenProps) => {
   const [phase, setPhase] = useState<OptionsPhase>('menu');
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [editingOrKey, setEditingOrKey] = useState(config.openrouterApiKey);
+  const [editingAaKey, setEditingAaKey] = useState(config.artificialAnalysisApiKey ?? '');
   const { state: modelsState } = useModels(config.openrouterApiKey);
   const { state: aaState } = useArtificialAnalysis(config.artificialAnalysisApiKey);
+
+  // ESC volta ao menu de qualquer sub-fase (incluindo edicao de keys)
+  useInput((_input, key) => {
+    if (key.escape && phase !== 'menu') {
+      setPhase('menu');
+    }
+  }, { isActive: phase === 'edit-openrouter-key' || phase === 'edit-aa-key' });
 
   const enrichedModels = buildEnrichedModels(
     modelsState.status === 'loaded' ? modelsState.models : [],
@@ -110,6 +128,28 @@ export const OptionsScreen = ({
     }
     setPhase('menu');
   }, [projectRoot]);
+
+  const handleOrKeySave = useCallback((value: string) => {
+    if (!value.trim()) {
+      setSaveMessage('OpenRouter API key nao pode ser vazia');
+      setPhase('menu');
+      return;
+    }
+    const updated: Config = { ...config, openrouterApiKey: value };
+    onConfigChange(updated);
+    setSaveMessage('OpenRouter API key atualizada');
+    setPhase('menu');
+  }, [config, onConfigChange]);
+
+  const handleAaKeySave = useCallback((value: string) => {
+    const updated: Config = {
+      ...config,
+      artificialAnalysisApiKey: value.trim() || undefined,
+    };
+    onConfigChange(updated);
+    setSaveMessage(value.trim() ? 'Artificial Analysis API key atualizada' : 'Artificial Analysis API key removida');
+    setPhase('menu');
+  }, [config, onConfigChange]);
 
   // --- Loading models ---
   if ((phase === 'planner-model' || phase === 'worker-model') && modelsState.status === 'loading') {
@@ -158,6 +198,60 @@ export const OptionsScreen = ({
     );
   }
 
+  // --- Edit OpenRouter API Key ---
+  if (phase === 'edit-openrouter-key') {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
+          <Text bold color="cyan">OpenRouter API Key</Text>
+          <Text dimColor>Altere sua chave de API do OpenRouter.</Text>
+          <Box marginTop={1}>
+            <Text>API Key: </Text>
+            <TextInput
+              value={editingOrKey}
+              onChange={setEditingOrKey}
+              onSubmit={handleOrKeySave}
+              mask="*"
+              placeholder="sk-or-..."
+            />
+          </Box>
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>Enter para salvar  |  ESC para cancelar</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  // --- Edit Artificial Analysis API Key ---
+  if (phase === 'edit-aa-key') {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
+          <Text bold color="cyan">Artificial Analysis API Key <Text dimColor>(opcional)</Text></Text>
+          <Text dimColor>Habilita benchmarks (Intelligence Index, Coding, Math, GPQA, etc.),</Text>
+          <Text dimColor>velocidade (tokens/s) e custo-beneficio na tabela de modelos.</Text>
+          <Box marginTop={1}>
+            <Text>AA Key: </Text>
+            <TextInput
+              value={editingAaKey}
+              onChange={setEditingAaKey}
+              onSubmit={handleAaKeySave}
+              mask="*"
+              placeholder="Cole a key ou Enter vazio para remover"
+            />
+          </Box>
+          {config.artificialAnalysisApiKey && (
+            <Text color="green" dimColor>Key atual configurada. Enter vazio para remover.</Text>
+          )}
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>Enter para salvar  |  ESC para cancelar  |  Obtenha em artificialanalysis.ai</Text>
+        </Box>
+      </Box>
+    );
+  }
+
   // --- Profile builder ---
   if (phase === 'create-profile') {
     return (
@@ -185,7 +279,16 @@ export const OptionsScreen = ({
   }
 
   // --- Main menu ---
+  const aaStatus = config.artificialAnalysisApiKey ? 'configurada' : 'nao configurada';
   const menuItems = [
+    {
+      label: `\u{1F511}  OpenRouter API Key`,
+      value: 'edit-or-key',
+    },
+    {
+      label: `\u{1F4CA}  Artificial Analysis Key   (${aaStatus})`,
+      value: 'edit-aa-key',
+    },
     {
       label: `\u{1F9E0}  Modelo Planner   ${modelSummary(config.selectedAgents.planner)}`,
       value: 'planner',
@@ -221,6 +324,11 @@ export const OptionsScreen = ({
 
       {/* Descricoes das opcoes */}
       <Box marginTop={1} flexDirection="column" paddingX={1}>
+        <Box flexDirection="column" marginBottom={1}>
+          <Text bold color="yellow">{'\u{1F511}'} API Keys</Text>
+          <Text dimColor>  Configure as chaves de API: OpenRouter (obrigatoria) e</Text>
+          <Text dimColor>  Artificial Analysis (opcional — habilita benchmarks na tabela).</Text>
+        </Box>
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color="yellow">{'\u{1F9E0}'} Modelo Planner</Text>
           <Text dimColor>  O Planner e o modelo de raciocinio pesado que decompoe sua macro-task</Text>
@@ -259,6 +367,8 @@ export const OptionsScreen = ({
           onSelect={(item) => {
             setSaveMessage(null);
             switch (item.value) {
+              case 'edit-or-key': setEditingOrKey(config.openrouterApiKey); setPhase('edit-openrouter-key'); break;
+              case 'edit-aa-key': setEditingAaKey(config.artificialAnalysisApiKey ?? ''); setPhase('edit-aa-key'); break;
               case 'planner': setPhase('planner-model'); break;
               case 'worker': setPhase('worker-model'); break;
               case 'ai-builder': setPhase('ai-builder'); break;

@@ -40,10 +40,10 @@ const ArchitectureSchema = z.object({
   instruct_type: z.string().nullable().default(null),
 }).passthrough();
 
-/** Schema para top_provider */
+/** Schema para top_provider — campos podem ser null na API */
 const TopProviderSchema = z.object({
-  context_length: z.number().default(0),
-  max_completion_tokens: z.number().default(0),
+  context_length: z.number().nullable().default(null),
+  max_completion_tokens: z.number().nullable().default(null),
   is_moderated: z.boolean().default(false),
 }).passthrough();
 
@@ -134,7 +134,7 @@ const normalizeModel = (raw: OpenRouterModelRaw): OpenRouterModel => {
     outputPrice,
     modality: raw.architecture.modality,
     tokenizer: raw.architecture.tokenizer,
-    maxCompletionTokens: raw.top_provider.max_completion_tokens,
+    maxCompletionTokens: raw.top_provider.max_completion_tokens ?? 0,
     isModerated: raw.top_provider.is_moderated,
     hasTools: raw.supported_parameters.includes('tools'),
     hasReasoning: raw.supported_parameters.includes('reasoning'),

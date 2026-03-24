@@ -11,8 +11,10 @@ Combina a filosofia YOLO minimalista do [Pi Coding Agent](https://github.com/bad
 ```bash
 npm install
 npm run build
-node dist/cli.js
+npm start          # atualiza benchmarks offline e inicia o CLI
 ```
+
+`npm start` executa automaticamente `npm run fetch-benchmarks` antes de iniciar o CLI, atualizando o JSON de benchmarks offline em `src/data/bundled-benchmarks.json`. Se o fetch falhar (sem internet, sem API key), o CLI inicia normalmente usando o JSON commitado no repo como fallback.
 
 ## Argumentos CLI
 
@@ -251,7 +253,8 @@ src/
 │   ├── models.ts                    # Catalogo dinamico de modelos (OpenRouter API)
 │   ├── openrouter-client.ts         # Client HTTP + cache para OpenRouter /models
 │   ├── artificial-analysis-client.ts # Client HTTP + cache para Artificial Analysis API
-│   └── enriched-model.ts            # Tipo enriquecido: OpenRouter + AA benchmarks
+│   ├── enriched-model.ts            # Tipo enriquecido: OpenRouter + AA benchmarks
+│   └── bundled-benchmarks.json      # Fallback offline (commitado, atualizado por npm start)
 ├── schemas/
 │   ├── dag.schema.ts                # DAG output do Planner (Zod)
 │   ├── config.schema.ts             # ~/.pi-dag-cli.json (Zod, selectedAgents + legado)
@@ -308,7 +311,8 @@ src/
 │       └── git-diff-handler.ts      # git_diff (captura diff do worktree)
 ├── services/
 │   ├── profile-catalog.ts           # Persistencia de perfis (global + local, Result<T>)
-│   └── ai-pipeline-generator.ts     # Geracao de pipelines via LangChain (2 chamadas LLM)
+│   ├── ai-pipeline-generator.ts     # Geracao de pipelines via LangChain (2 chamadas LLM)
+│   └── offline-benchmark-cache.ts   # Cache offline em disco (~/.pi-dag-cli/benchmark-cache.json)
 ├── git/
 │   ├── git-types.ts                 # Tipos Result, GitError, CommitHash
 │   ├── git-wrapper.ts               # Operacoes Git atomicas (execFile)

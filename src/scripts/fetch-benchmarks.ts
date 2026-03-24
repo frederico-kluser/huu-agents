@@ -4,7 +4,7 @@
  *
  * Uso:
  *   npm run fetch-benchmarks
- *   npm run fetch-benchmarks -- --output ./src/data/bundled-benchmarks.json
+ *   npm run fetch-benchmarks -- --output ./custom/path/bundled-benchmarks.json
  *
  * O JSON gerado serve como fallback offline quando:
  * 1. Nao ha cache global em disco (~/.pi-dag-cli/benchmark-cache.json)
@@ -31,9 +31,10 @@ const AA_BASE_URL = 'https://artificialanalysis.ai/api/v2';
 const FETCH_TIMEOUT_MS = 20_000;
 const YEAR_2025_UNIX = 1735689600;
 
+/** Caminho do JSON bundled no source (commitado no repo, fallback offline) */
 const DEFAULT_OUTPUT = join(
   fileURLToPath(new URL('.', import.meta.url)),
-  '..', 'data', 'bundled-benchmarks.json',
+  '..', '..', 'src', 'data', 'bundled-benchmarks.json',
 );
 
 // ── Schemas ───────────────────────────────────────────────────────

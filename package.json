@@ -12,6 +12,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
+    "prestart": "npm run fetch-benchmarks || true",
     "start": "node dist/cli.js",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",

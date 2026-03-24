@@ -10,10 +10,10 @@
 npm install            # Instalar dependências
 npm run build          # Transpile TS → JS (dist/)
 npm run dev            # tsc --watch
-npm start              # node dist/cli.js
+npm start              # fetch-benchmarks + node dist/cli.js (auto-atualiza JSON offline)
 npm run lint           # ESLint
 npm run typecheck      # tsc --noEmit
-npm run fetch-benchmarks  # Fetch OR + AA → bundled JSON + cache global
+npm run fetch-benchmarks  # Fetch OR + AA → src/data/bundled-benchmarks.json + cache global
 ```
 
 ## Stack
@@ -30,7 +30,7 @@ src/
 │   ├── openrouter-client.ts         # Client HTTP + cache para OpenRouter /models
 │   ├── artificial-analysis-client.ts # Client HTTP + cache para Artificial Analysis API
 │   ├── enriched-model.ts            # Tipo enriquecido: OpenRouter + AA benchmarks
-│   └── bundled-benchmarks.json      # Fallback offline (gerado por npm run fetch-benchmarks)
+│   └── bundled-benchmarks.json      # Fallback offline (commitado no repo, atualizado por npm start)
 ├── schemas/
 │   ├── dag.schema.ts                # DAG output do Planner
 │   ├── config.schema.ts             # Config persistida (selectedAgents + legado)
@@ -116,7 +116,7 @@ Integração opcional com a API da Artificial Analysis para enriquecer a tabela 
 
 **Enhanced Model Table:** Tabela avançada com scroll horizontal (←→), vertical (↑↓, `<>` para página), seletor de ordenação (`s` abre modal de seleção, `S` inverte direção), seletor de colunas (`c` abre modal de checkboxes com descrições de cada métrica — substitui legenda fixa), filtros preset (`p`), filtro de texto (`f` para digitar, `F` para construtor visual), **atualização manual** (`u` busca dados frescos das APIs e salva no cache global). Filtros compostos: texto OR'd, métricas AND'd (ex: `openai|google|$Intel>=40|$MMLU>=70` → (openai OR google) AND Intel>=40 AND MMLU>=70). Matching automático entre modelos OpenRouter e AA por nome normalizado.
 
-**Cache offline:** Hierarquia de 4 níveis: (1) memória do processo, (2) disco global `~/.pi-dag-cli/benchmark-cache.json` (TTL 24h), (3) bundled fallback `src/data/bundled-benchmarks.json` (gerado por `npm run fetch-benchmarks`), (4) fetch das APIs. Ao abrir o app, tenta disco/bundled antes de chamar APIs. Tecla `u` na tabela invalida caches e busca dados frescos. Script `npm run fetch-benchmarks` puxa dados das duas APIs, cruza e salva tanto no bundled JSON quanto no cache global. Client em `src/data/artificial-analysis-client.ts`, tipo enriquecido em `src/data/enriched-model.ts`, cache em `src/services/offline-benchmark-cache.ts`.
+**Cache offline:** Hierarquia de 4 níveis: (1) memória do processo, (2) disco global `~/.pi-dag-cli/benchmark-cache.json` (TTL 24h), (3) bundled fallback `src/data/bundled-benchmarks.json` (commitado no repo, atualizado automaticamente por `npm start`), (4) fetch das APIs. Ao abrir o app, tenta disco/bundled antes de chamar APIs. Tecla `u` na tabela invalida caches e busca dados frescos. `npm start` roda `npm run fetch-benchmarks` antes do CLI (falha silenciosa se sem rede/key). Script puxa dados das duas APIs, cruza e salva no JSON em `src/data/` e no cache global. Client em `src/data/artificial-analysis-client.ts`, tipo enriquecido em `src/data/enriched-model.ts`, cache em `src/services/offline-benchmark-cache.ts`.
 
 ## AI Pipeline Builder
 

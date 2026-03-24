@@ -6,7 +6,7 @@
  * Hierarquia de fallback:
  * 1. Cache em memoria (nos clients)
  * 2. Cache global em disco (~/.pi-dag-cli/benchmark-cache.json)
- * 3. Bundled fallback (src/data/bundled-benchmarks.json via import)
+ * 3. Bundled fallback (src/data/bundled-benchmarks.json — commitado no repo)
  * 4. Fetch das APIs (ultima opcao)
  *
  * @module

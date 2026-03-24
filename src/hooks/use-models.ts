@@ -23,10 +23,10 @@ import {
   loadBundledFallback,
 } from '../services/offline-benchmark-cache.js';
 
-/** Caminho do bundled fallback relativo ao modulo compilado */
+/** Caminho do bundled fallback no source (commitado no repo) */
 const BUNDLED_PATH = join(
   fileURLToPath(new URL('.', import.meta.url)),
-  '..', 'data', 'bundled-benchmarks.json',
+  '..', '..', 'src', 'data', 'bundled-benchmarks.json',
 );
 
 /** Estado do carregamento de modelos */

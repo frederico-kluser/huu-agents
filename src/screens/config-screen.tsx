@@ -2,13 +2,14 @@ import { useState, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import TextInput from 'ink-text-input';
 import { useApiValidation, type ValidationState } from '../hooks/use-api-validation.js';
+import { useOpenRouterModels } from '../hooks/use-openrouter-models.js';
 import { ModelTable } from '../components/model-table.js';
-import { getPlannerModels, getWorkerModels, findModel, formatPrice } from '../data/models.js';
+import { findModel, formatPrice, toModelEntry } from '../data/models.js';
 import type { ModelEntry } from '../data/models.js';
 import type { Config } from '../schemas/config.schema.js';
 import { getApiErrorMessage } from '../schemas/errors.js';
 
-type ConfigStep = 'api-key' | 'planner-model' | 'worker-model' | 'concurrency';
+type ConfigStep = 'api-key' | 'loading-models' | 'planner-model' | 'worker-model' | 'concurrency';
 
 interface ConfigScreenProps {
   readonly onComplete: (config: Config) => void;
@@ -31,11 +32,10 @@ const ModelSummary = ({ label, modelId }: { readonly label: string; readonly mod
   const model = findModel(modelId);
   const name = model?.name ?? modelId;
   const price = model ? `${formatPrice(model.inputPrice)}/${formatPrice(model.outputPrice)}` : '';
-  const swe = model?.sweBench !== null && model?.sweBench !== undefined ? ` | SWE: ${model.sweBench}%` : '';
   return (
     <Box marginTop={1}>
       <Text bold>{label}: </Text>
-      <Text color="green">{name} ({price}{swe}) </Text>
+      <Text color="green">{name} ({price}) </Text>
       <Text color="green">✓</Text>
     </Box>
   );
@@ -43,8 +43,8 @@ const ModelSummary = ({ label, modelId }: { readonly label: string; readonly mod
 
 /**
  * Tela de configuração do Pi DAG CLI.
- * Coleta API key, e permite seleção de modelos Planner e Worker
- * via tabela filtrável com 18 modelos (preço, velocidade, benchmarks).
+ * Coleta API key, busca modelos da OpenRouter em tempo real,
+ * e permite seleção de Planner e Worker via tabela filtrável.
  *
  * @param props.onComplete - Callback com Config validada
  * @param props.skipApiKey - Pular API key (reconfiguração via [m])
@@ -53,24 +53,30 @@ const ModelSummary = ({ label, modelId }: { readonly label: string; readonly mod
  * @example
  * ```tsx
  * <ConfigScreen onComplete={(config) => saveConfig(config)} />
- * <ConfigScreen skipApiKey existingConfig={currentConfig} onComplete={handleModelChange} />
  * ```
  */
 export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigScreenProps) => {
-  const initialStep: ConfigStep = skipApiKey ? 'planner-model' : 'api-key';
+  const initialStep: ConfigStep = skipApiKey ? 'loading-models' : 'api-key';
   const [step, setStep] = useState<ConfigStep>(initialStep);
   const [apiKey, setApiKey] = useState(existingConfig?.openrouterApiKey ?? '');
   const [plannerModelId, setPlannerModelId] = useState(existingConfig?.selectedAgents?.planner ?? '');
   const [workerModelId, setWorkerModelId] = useState(existingConfig?.selectedAgents?.worker ?? '');
   const [concurrency, setConcurrency] = useState(String(existingConfig?.maxConcurrency ?? 4));
   const { validation, validate } = useApiValidation();
+  const { state: modelsState, refresh: refreshModels } = useOpenRouterModels(apiKey || undefined);
+
+  const allModels: readonly ModelEntry[] =
+    modelsState.status === 'loaded' ? modelsState.models.map(toModelEntry) : [];
 
   const handleApiKeySubmit = useCallback((value: string) => {
     if (!value.trim()) return;
     void validate(value).then((isValid) => {
-      if (isValid) setStep('planner-model');
+      if (isValid) {
+        setStep('loading-models');
+        refreshModels();
+      }
     });
-  }, [validate]);
+  }, [validate, refreshModels]);
 
   const handlePlannerSelect = useCallback((model: ModelEntry) => {
     setPlannerModelId(model.id);
@@ -122,13 +128,35 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
     );
   }
 
+  // Step: Loading models from OpenRouter
+  if (step === 'loading-models') {
+    if (modelsState.status === 'loading' || modelsState.status === 'idle') {
+      return (
+        <Box padding={1} gap={1}>
+          <Text color="yellow">⏳</Text>
+          <Text>Buscando modelos da OpenRouter...</Text>
+        </Box>
+      );
+    }
+    if (modelsState.status === 'error') {
+      return (
+        <Box flexDirection="column" padding={1}>
+          <Text color="red">Erro ao buscar modelos: {modelsState.message}</Text>
+          <Text dimColor>Verifique sua conexao e API key.</Text>
+        </Box>
+      );
+    }
+    // Loaded — advance to planner selection
+    setStep('planner-model');
+  }
+
   // Step: Planner Model
   if (step === 'planner-model') {
     return (
       <ModelTable
-        models={getPlannerModels()}
+        models={allModels}
         onSelect={handlePlannerSelect}
-        title="Modelo Planner (raciocinio)"
+        title={`Modelo Planner (${allModels.length} modelos disponiveis)`}
       />
     );
   }
@@ -139,9 +167,9 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
       <Box flexDirection="column">
         <ModelSummary label="Planner" modelId={plannerModelId} />
         <ModelTable
-          models={getWorkerModels()}
+          models={allModels}
           onSelect={handleWorkerSelect}
-          title="Modelo Worker (execucao rapida)"
+          title={`Modelo Worker (${allModels.length} modelos disponiveis)`}
         />
       </Box>
     );

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { MODEL_CATALOG } from '../data/models.js';
+import { getModels } from '../data/models.js';
 import { END_STEP_ID, type ProfileScope, type WorkerProfile, type WorkerStep } from '../schemas/worker-profile.schema.js';
 import {
   buildProfile,
@@ -366,7 +366,7 @@ export function useProfileBuilderState({
         initialValue: meta.workerModel,
         options: [
           { label: '(inherit from current worker config)', value: '' },
-          ...MODEL_CATALOG.map((model) => ({
+          ...getModels().map((model) => ({
             label: `${model.name} (${model.id})`,
             value: model.id,
           })),
@@ -381,7 +381,7 @@ export function useProfileBuilderState({
         initialValue: meta.langchainModel,
         options: [
           { label: '(inherit from current worker config)', value: '' },
-          ...MODEL_CATALOG.map((model) => ({
+          ...getModels().map((model) => ({
             label: `${model.name} (${model.id})`,
             value: model.id,
           })),

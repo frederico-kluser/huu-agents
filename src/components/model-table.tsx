@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
 import TextInput from 'ink-text-input';
 import type { ModelEntry } from '../data/models.js';
-import { formatPrice, formatContext } from '../data/models.js';
+import { formatPrice, formatContext, formatMaxTokens } from '../data/models.js';
 
 interface ModelTableProps {
   readonly models: readonly ModelEntry[];
@@ -12,14 +12,11 @@ interface ModelTableProps {
 
 const HEADER_LINES = 6;
 
-const speedColor = (s: number): string =>
-  s >= 150 ? 'green' : s >= 50 ? 'yellow' : 'red';
+const priceColor = (p: number): string | undefined =>
+  p <= 0.5 ? 'green' : p <= 3 ? 'yellow' : undefined;
 
-const sweColor = (s: number | null): string | undefined =>
-  s === null ? undefined : s >= 78 ? 'green' : s >= 70 ? 'yellow' : undefined;
-
-const pcColor = (r: number): string | undefined =>
-  r >= 200 ? 'green' : r >= 50 ? 'yellow' : undefined;
+const ctxColor = (ctx: number): string | undefined =>
+  ctx >= 200_000 ? 'green' : ctx >= 100_000 ? 'yellow' : undefined;
 
 const pad = (str: string, len: number): string =>
   str.length >= len ? str.slice(0, len) : str + ' '.repeat(len - str.length);
@@ -28,12 +25,13 @@ const padR = (str: string, len: number): string =>
   str.length >= len ? str.slice(0, len) : ' '.repeat(len - str.length) + str;
 
 /**
- * Tabela filtrável de modelos LLM para seleção no terminal.
+ * Tabela filtrável de modelos LLM com dados em tempo real da OpenRouter.
+ * Exibe: nome, provider, contexto, preços, modalidade, tokenizer, tools, reasoning.
  * Suporta filtro por texto, navegação j/k, e seleção via Enter.
  *
  * @example
  * ```tsx
- * <ModelTable models={getPlannerModels()} onSelect={handleSelect} title="Planner" />
+ * <ModelTable models={allModels} onSelect={handleSelect} title="Selecionar Modelo" />
  * ```
  */
 export const ModelTable = ({ models, onSelect, title }: ModelTableProps) => {
@@ -49,7 +47,9 @@ export const ModelTable = ({ models, onSelect, title }: ModelTableProps) => {
       (m) =>
         m.name.toLowerCase().includes(q) ||
         m.provider.toLowerCase().includes(q) ||
-        m.id.toLowerCase().includes(q),
+        m.id.toLowerCase().includes(q) ||
+        m.tokenizer.toLowerCase().includes(q) ||
+        m.modality.toLowerCase().includes(q),
     );
   }, [models, filter]);
 
@@ -75,40 +75,53 @@ export const ModelTable = ({ models, onSelect, title }: ModelTableProps) => {
         {title && <Text bold color="cyan">{title}</Text>}
         <Box marginTop={1}>
           <Text dimColor>Filtro: </Text>
-          <TextInput value={filter} onChange={(v) => { setFilter(v); setCursor(0); }} placeholder="nome, provider ou id..." />
+          <TextInput value={filter} onChange={(v) => { setFilter(v); setCursor(0); }} placeholder="nome, provider, id, tokenizer..." />
         </Box>
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
         <Box>
-          <Text dimColor>{pad('Nome', 22)}{pad('Provider', 12)}{padR('t/s', 5)} {padR('Ctx', 5)} {padR('$In', 6)} {padR('$Out', 6)} {padR('SWE%', 6)} {padR('P/C', 5)}</Text>
+          <Text dimColor>
+            {pad('Nome', 26)}{pad('Provider', 12)}{padR('Ctx', 7)} {padR('$In/M', 8)} {padR('$Out/M', 8)} {padR('MaxOut', 6)} {pad('Tok', 8)} {pad('Tools', 5)} {pad('Reas', 4)} {pad('Desde', 10)}
+          </Text>
         </Box>
-        <Text dimColor>{'─'.repeat(72)}</Text>
+        <Text dimColor>{'─'.repeat(100)}</Text>
 
         {visible.map((m, i) => {
           const idx = scrollOffset + i;
           const active = idx === safeCursor;
+          const bg = active ? 'cyan' : undefined;
+          const fg = active ? 'black' : undefined;
+
           return (
             <Box key={m.id}>
-              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : undefined}>
-                {pad(m.name, 22)}
-                {pad(m.provider, 12)}
+              <Text backgroundColor={bg} color={fg}>
+                {pad(m.name.slice(0, 25), 26)}
+                {pad(m.provider.slice(0, 11), 12)}
               </Text>
-              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : speedColor(m.speed)}>
-                {padR(String(m.speed), 5)}
+              <Text backgroundColor={bg} color={active ? 'black' : ctxColor(m.contextWindow)}>
+                {padR(formatContext(m.contextWindow), 7)}
               </Text>
-              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : undefined}>
-                {' '}{padR(formatContext(m.contextWindow), 5)}
+              <Text backgroundColor={bg} color={active ? 'black' : priceColor(m.inputPrice)}>
+                {' '}{padR(formatPrice(m.inputPrice), 8)}
               </Text>
-              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : undefined} dimColor={!active}>
-                {' '}{padR(formatPrice(m.inputPrice), 6)}
-                {' '}{padR(formatPrice(m.outputPrice), 6)}
+              <Text backgroundColor={bg} color={active ? 'black' : priceColor(m.outputPrice)}>
+                {' '}{padR(formatPrice(m.outputPrice), 8)}
               </Text>
-              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : sweColor(m.sweBench)}>
-                {' '}{padR(m.sweBench !== null ? `${m.sweBench}%` : '—', 6)}
+              <Text backgroundColor={bg} color={fg}>
+                {' '}{padR(formatMaxTokens(m.maxCompletionTokens), 6)}
               </Text>
-              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : pcColor(m.perfCostRatio)} bold={!active && m.perfCostRatio >= 200}>
-                {' '}{padR(String(m.perfCostRatio), 5)}
+              <Text backgroundColor={bg} color={fg} dimColor={!active}>
+                {' '}{pad(m.tokenizer.slice(0, 7), 8)}
+              </Text>
+              <Text backgroundColor={bg} color={active ? 'black' : m.hasTools ? 'green' : undefined}>
+                {' '}{pad(m.hasTools ? 'Y' : '—', 5)}
+              </Text>
+              <Text backgroundColor={bg} color={active ? 'black' : m.hasReasoning ? 'green' : undefined}>
+                {' '}{pad(m.hasReasoning ? 'Y' : '—', 4)}
+              </Text>
+              <Text backgroundColor={bg} color={fg} dimColor={!active}>
+                {' '}{pad(m.createdAt, 10)}
               </Text>
               {active && <Text> {'<'}</Text>}
             </Box>

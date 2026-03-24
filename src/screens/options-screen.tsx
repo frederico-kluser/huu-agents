@@ -11,7 +11,8 @@ import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import { ModelTable } from '../components/model-table.js';
 import { ProfileBuilderScreen } from './profile-builder-screen.js';
-import { MODEL_CATALOG, findModel, formatPrice } from '../data/models.js';
+import { useOpenRouterModels } from '../hooks/use-openrouter-models.js';
+import { findModel, formatPrice, toModelEntry } from '../data/models.js';
 import type { ModelEntry } from '../data/models.js';
 import type { Config } from '../schemas/config.schema.js';
 import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
@@ -57,6 +58,10 @@ export const OptionsScreen = ({
 }: OptionsScreenProps) => {
   const [phase, setPhase] = useState<OptionsPhase>('menu');
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const { state: modelsState } = useOpenRouterModels(config.openrouterApiKey);
+
+  const allModels: readonly ModelEntry[] =
+    modelsState.status === 'loaded' ? modelsState.models.map(toModelEntry) : [];
 
   const handlePlannerSelect = useCallback((model: ModelEntry) => {
     const updated: Config = {
@@ -97,13 +102,29 @@ export const OptionsScreen = ({
     setPhase('menu');
   }, [projectRoot]);
 
+  // --- Loading models ---
+  if ((phase === 'planner-model' || phase === 'worker-model') && modelsState.status !== 'loaded') {
+    return (
+      <Box padding={1} gap={1}>
+        {modelsState.status === 'error' ? (
+          <Text color="red">Erro ao buscar modelos: {modelsState.message}</Text>
+        ) : (
+          <>
+            <Text color="yellow">⏳</Text>
+            <Text>Carregando modelos da OpenRouter...</Text>
+          </>
+        )}
+      </Box>
+    );
+  }
+
   // --- Planner model selection ---
   if (phase === 'planner-model') {
     return (
       <ModelTable
-        models={MODEL_CATALOG}
+        models={allModels}
         onSelect={handlePlannerSelect}
-        title="Selecionar Modelo Planner"
+        title={`Selecionar Modelo Planner (${allModels.length} modelos)`}
       />
     );
   }
@@ -112,9 +133,9 @@ export const OptionsScreen = ({
   if (phase === 'worker-model') {
     return (
       <ModelTable
-        models={MODEL_CATALOG}
+        models={allModels}
         onSelect={handleWorkerSelect}
-        title="Selecionar Modelo Worker"
+        title={`Selecionar Modelo Worker (${allModels.length} modelos)`}
       />
     );
   }
@@ -170,14 +191,14 @@ export const OptionsScreen = ({
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color="yellow">{'\u{1F9E0}'} Modelo Planner</Text>
           <Text dimColor>  O Planner e o modelo de raciocinio pesado que decompoe sua macro-task</Text>
-          <Text dimColor>  em um DAG de subtasks. Modelos maiores (Opus, GPT-5) geram DAGs</Text>
-          <Text dimColor>  mais precisos. Modelos menores sao mais rapidos e baratos.</Text>
+          <Text dimColor>  em um DAG de subtasks. Modelos maiores geram DAGs mais precisos.</Text>
+          <Text dimColor>  Modelos menores sao mais rapidos e baratos.</Text>
         </Box>
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color="yellow">{'\u2699\uFE0F'}  Modelo Worker</Text>
           <Text dimColor>  Os Workers executam cada subtask em worktrees Git isoladas.</Text>
-          <Text dimColor>  Modelos rapidos (Flash, Haiku, MiMo) funcionam bem para tarefas</Text>
-          <Text dimColor>  simples. Modelos maiores ajudam em tarefas complexas.</Text>
+          <Text dimColor>  Modelos rapidos funcionam bem para tarefas simples.</Text>
+          <Text dimColor>  Modelos maiores ajudam em tarefas complexas.</Text>
         </Box>
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color="yellow">{'\u{1F527}'} Pipeline Profile</Text>

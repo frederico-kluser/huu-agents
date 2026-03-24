@@ -166,6 +166,48 @@ export async function saveProfile(
   }
 }
 
+// ── Delete ───────────────────────────────────────────────────
+
+/**
+ * Remove perfil por ID do catálogo do scope indicado.
+ * Não é erro se o perfil não existir — operação idempotente.
+ *
+ * @param profileId - ID do perfil a remover
+ * @param scope - Global ou project
+ * @param rootPath - Raiz do projeto (obrigatório se scope = project)
+ * @returns Resultado indicando sucesso ou erro de escrita
+ *
+ * @example
+ * const result = await deleteProfile('test-driven-fixer', 'project', '/home/user/my-project');
+ * if (result.ok) console.log('Perfil removido');
+ */
+export async function deleteProfile(
+  profileId: string,
+  scope: ProfileScope,
+  rootPath?: string,
+): Promise<Result<void>> {
+  const catalogPath = scope === 'global'
+    ? getGlobalCatalogPath()
+    : getLocalCatalogPath(rootPath ?? '.');
+
+  const loadResult = await loadCatalog(catalogPath);
+  const catalog = loadResult.ok ? loadResult.value : EMPTY_CATALOG;
+
+  const updated: ProfileCatalog = {
+    version: 1,
+    profiles: catalog.profiles.filter((p) => p.id !== profileId),
+  };
+
+  try {
+    await mkdir(dirname(catalogPath), { recursive: true });
+    await writeFile(catalogPath, JSON.stringify(updated, null, 2), 'utf-8');
+    return ok(undefined);
+  } catch (e: unknown) {
+    const detail = e instanceof Error ? e.message : 'Unknown write error';
+    return err({ kind: 'write_error', path: catalogPath, detail });
+  }
+}
+
 // ── Resolve ───────────────────────────────────────────────────────
 
 /**

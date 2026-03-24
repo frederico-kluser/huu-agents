@@ -2,7 +2,7 @@
 
 ## Projeto
 
-**Pi DAG Task CLI** decompõe macro-tarefas em DAG, executa agentes IA paralelos em Git Worktrees isoladas, e mergeia resultados. Pipeline integrado: Planner → DAG Executor → Worker Runner com retry. Workers podem operar em modo one-shot (direto) ou multi-step via **Worker Pipeline Profiles** — pipelines declarativas reutilizáveis com 7 tipos de step. 18 modelos selecionáveis de 10 providers via OpenRouter.
+**Pi DAG Task CLI** decompõe macro-tarefas em DAG, executa agentes IA paralelos em Git Worktrees isoladas, e mergeia resultados. Pipeline integrado: Planner → DAG Executor → Worker Runner com retry. Workers podem operar em modo one-shot (direto) ou multi-step via **Worker Pipeline Profiles** — pipelines declarativas reutilizáveis com 7 tipos de step. Catálogo dinâmico de modelos 2025+ carregados em tempo real da OpenRouter API.
 
 ## Comandos
 
@@ -25,7 +25,8 @@ Node.js >=20, TypeScript strict (ES2022/NodeNext), Ink v6 + React 19, Zod, LangC
 src/
 ├── cli.tsx, cli-args.ts             # Entry point + CLI args parser
 ├── app.tsx                          # Router (state machine + StatusBar)
-├── data/models.ts                   # Catálogo 18 modelos (preço, speed, SWE-Bench)
+├── data/models.ts                   # Catálogo dinâmico de modelos (OpenRouter API)
+│   └── openrouter-client.ts         # Client HTTP + cache para OpenRouter /models
 ├── schemas/
 │   ├── dag.schema.ts                # DAG output do Planner
 │   ├── config.schema.ts             # Config persistida (selectedAgents + legado)
@@ -45,7 +46,7 @@ src/
 │   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
 │   └── diff-screen.tsx              # Diff completo da branch
 ├── components/                      # 6 componentes
-│   ├── model-table.tsx              # Tabela filtrável de 18 modelos
+│   ├── model-table.tsx              # Tabela filtrável de modelos OpenRouter
 │   ├── status-bar.tsx               # Barra informacional de modelos atuais
 │   ├── pipeline-trace.tsx           # Trace step-by-step de pipeline
 │   ├── dag-node-row.tsx, tree-node.tsx, worker-log.tsx
@@ -67,7 +68,7 @@ src/
 ├── services/
 │   └── profile-catalog.ts           # Persistência de perfis (global + local, Result<T>)
 ├── git/                             # git-wrapper, worktree-manager, conflict-resolver
-├── hooks/                           # use-config, use-file-tree, use-api-validation, use-elapsed-time
+├── hooks/                           # use-config, use-file-tree, use-api-validation, use-elapsed-time, use-models
 └── utils/                           # file-tree, path-guard
 ```
 
@@ -123,7 +124,7 @@ Referência: `docs/general/file-agent-patterns.md`.
 - LOC acima de 500/arquivo
 - Novas dependências
 - Modificar arquitetura do pipeline (orchestrator, dag-executor)
-- Alterar catálogo de modelos (`src/data/models.ts`)
+- Alterar client da OpenRouter (`src/data/openrouter-client.ts`)
 - Adicionar novos step types ao registry
 
 **NUNCA:**

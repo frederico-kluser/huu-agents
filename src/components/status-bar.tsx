@@ -6,7 +6,7 @@ interface StatusBarProps {
   readonly workerModel: string;
 }
 
-/** Formata resumo compacto de um modelo: "Nome ($in/$out)" */
+/** Formata resumo compacto de um modelo: "Nome ($in/$out)" ou fallback para ID */
 const modelLabel = (id: string): string => {
   const m = findModel(id);
   if (!m) return id;
@@ -16,6 +16,7 @@ const modelLabel = (id: string): string => {
 /**
  * Barra de status compacta mostrando modelos Planner e Worker atuais.
  * Visível em todas as telas exceto loading e config.
+ * Usa cache de modelos — exibe ID se modelo não estiver no cache.
  *
  * @example
  * ```tsx

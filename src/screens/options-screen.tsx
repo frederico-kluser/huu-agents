@@ -8,10 +8,12 @@
 
 import { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
+import Spinner from 'ink-spinner';
 import SelectInput from 'ink-select-input';
 import { ModelTable } from '../components/model-table.js';
 import { ProfileBuilderScreen } from './profile-builder-screen.js';
-import { MODEL_CATALOG, findModel, formatPrice } from '../data/models.js';
+import { useModels } from '../hooks/use-models.js';
+import { findModel, formatPrice } from '../data/models.js';
 import type { ModelEntry } from '../data/models.js';
 import type { Config } from '../schemas/config.schema.js';
 import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
@@ -57,6 +59,7 @@ export const OptionsScreen = ({
 }: OptionsScreenProps) => {
   const [phase, setPhase] = useState<OptionsPhase>('menu');
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const { state: modelsState } = useModels(config.openrouterApiKey);
 
   const handlePlannerSelect = useCallback((model: ModelEntry) => {
     const updated: Config = {
@@ -97,13 +100,36 @@ export const OptionsScreen = ({
     setPhase('menu');
   }, [projectRoot]);
 
+  const allModels = modelsState.status === 'loaded' ? modelsState.models : [];
+
+  // --- Loading models ---
+  if ((phase === 'planner-model' || phase === 'worker-model') && modelsState.status === 'loading') {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box gap={1}>
+          <Text color="green"><Spinner type="dots" /></Text>
+          <Text>Carregando modelos da OpenRouter...</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if ((phase === 'planner-model' || phase === 'worker-model') && modelsState.status === 'error') {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text color="red">Erro ao carregar modelos: {modelsState.error}</Text>
+        <Text dimColor>Pressione ESC para voltar</Text>
+      </Box>
+    );
+  }
+
   // --- Planner model selection ---
   if (phase === 'planner-model') {
     return (
       <ModelTable
-        models={MODEL_CATALOG}
+        models={allModels}
         onSelect={handlePlannerSelect}
-        title="Selecionar Modelo Planner"
+        title={`Selecionar Modelo Planner (${allModels.length} modelos)`}
       />
     );
   }
@@ -112,9 +138,9 @@ export const OptionsScreen = ({
   if (phase === 'worker-model') {
     return (
       <ModelTable
-        models={MODEL_CATALOG}
+        models={allModels}
         onSelect={handleWorkerSelect}
-        title="Selecionar Modelo Worker"
+        title={`Selecionar Modelo Worker (${allModels.length} modelos)`}
       />
     );
   }
@@ -163,6 +189,9 @@ export const OptionsScreen = ({
       <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
         <Text bold color="cyan">{'\u2699\uFE0F'}  Opcoes</Text>
         <Text dimColor>Configure modelos, crie pipelines e consulte o guia de referencia.</Text>
+        {modelsState.status === 'loaded' && (
+          <Text dimColor>{modelsState.models.length} modelos disponiveis via OpenRouter</Text>
+        )}
       </Box>
 
       {/* Descricoes das opcoes */}
@@ -170,25 +199,21 @@ export const OptionsScreen = ({
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color="yellow">{'\u{1F9E0}'} Modelo Planner</Text>
           <Text dimColor>  O Planner e o modelo de raciocinio pesado que decompoe sua macro-task</Text>
-          <Text dimColor>  em um DAG de subtasks. Modelos maiores (Opus, GPT-5) geram DAGs</Text>
-          <Text dimColor>  mais precisos. Modelos menores sao mais rapidos e baratos.</Text>
+          <Text dimColor>  em um DAG de subtasks. Modelos maiores geram DAGs mais precisos.</Text>
         </Box>
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color="yellow">{'\u2699\uFE0F'}  Modelo Worker</Text>
           <Text dimColor>  Os Workers executam cada subtask em worktrees Git isoladas.</Text>
-          <Text dimColor>  Modelos rapidos (Flash, Haiku, MiMo) funcionam bem para tarefas</Text>
-          <Text dimColor>  simples. Modelos maiores ajudam em tarefas complexas.</Text>
+          <Text dimColor>  Modelos rapidos funcionam bem para tarefas simples.</Text>
         </Box>
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color="yellow">{'\u{1F527}'} Pipeline Profile</Text>
           <Text dimColor>  Transforma workers de executores one-shot em pipelines multi-step.</Text>
           <Text dimColor>  Crie fluxos com IA, condicoes, loops e variaveis compartilhadas.</Text>
-          <Text dimColor>  Ex: gerar testes {'\u2192'} corrigir codigo {'\u2192'} validar {'\u2192'} reformular se falhou.</Text>
         </Box>
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color="yellow">{'\u{1F4D6}'} Guia de Referencia</Text>
-          <Text dimColor>  Documentacao completa sobre step types, variaveis, como criar</Text>
-          <Text dimColor>  pipelines e exemplos de uso. Consulte antes de criar perfis.</Text>
+          <Text dimColor>  Documentacao completa sobre step types, variaveis e exemplos.</Text>
         </Box>
       </Box>
 
@@ -319,36 +344,24 @@ function GuideSteps() {
       <Text bold color="green">{'\u{1F916}'} pi_agent — Executa IA no worktree</Text>
       <Text dimColor>  Roda o Pi Coding Agent com o taskTemplate resolvido.</Text>
       <Text dimColor>  O agente pode criar/editar arquivos e rodar comandos.</Text>
-      <Text color="red" dimColor>  {'!!'} NAO cria variaveis do pipeline — opera apenas no filesystem.</Text>
-      <Text dimColor>  Le: $task, $custom_* (via template)  |  Escreve: nenhuma variavel</Text>
       <Text> </Text>
       <Text bold color="magenta">{'\u{1F4AC}'} langchain_prompt — Gera texto via LLM</Text>
       <Text dimColor>  Envia prompt ao LLM e salva a resposta em uma variavel.</Text>
-      <Text dimColor>  Ideal para reformular tasks ou tomar decisoes.</Text>
-      <Text dimColor>  Le: $task, $custom_* (via inputTemplate)  |  Escreve: outputTarget</Text>
       <Text> </Text>
       <Text bold color="yellow">{'\u{1F500}'} condition — Bifurca execucao</Text>
       <Text dimColor>  Avalia: $variavel operador valor (ex: $custom_tries {'>'}= 3)</Text>
-      <Text dimColor>  Operadores: ==  !=  {'>='}  {'<='}  {'>'}  {'<'}</Text>
-      <Text dimColor>  Le: variavel da expressao  |  Escreve: nenhuma</Text>
       <Text> </Text>
       <Text bold color="cyan">{'\u27A1\uFE0F'}  goto — Salto incondicional</Text>
       <Text dimColor>  Move o cursor para outro step ou __end__.</Text>
-      <Text dimColor>  Cuidado com loops sem condicao de saida!</Text>
       <Text> </Text>
       <Text bold color="blue">{'\u{1F4DD}'} set_variable — Define variavel</Text>
-      <Text dimColor>  Valor literal: value (numero, texto, boolean)</Text>
-      <Text dimColor>  OU expressao: valueExpression ($custom_tries + 1)</Text>
-      <Text dimColor>  Apenas UM dos dois pode ser usado por vez.</Text>
-      <Text dimColor>  Le: variavel na expressao  |  Escreve: target</Text>
+      <Text dimColor>  Valor literal ou expressao aritmetica.</Text>
       <Text> </Text>
       <Text bold color="white">{'\u{1F4CB}'} git_diff — Captura diff do worktree</Text>
-      <Text dimColor>  Executa git diff e armazena em variavel (normalmente $diff).</Text>
-      <Text dimColor>  Use antes de condition ou langchain_prompt para analisar mudancas.</Text>
+      <Text dimColor>  Executa git diff e armazena em variavel.</Text>
       <Text> </Text>
       <Text bold color="red">{'\u{1F6D1}'} fail — Encerra com erro</Text>
       <Text dimColor>  Encerra a pipeline com mensagem de erro de negocio.</Text>
-      <Text dimColor>  O worker sera marcado como falho no DAG.</Text>
     </Box>
   );
 }
@@ -358,55 +371,15 @@ function GuideVariables() {
     <Box flexDirection="column">
       <Text bold color="yellow">Sistema de Variaveis</Text>
       <Text dimColor>  Variaveis sao o estado compartilhado entre steps de uma pipeline.</Text>
-      <Text dimColor>  Cada worker tem suas proprias variaveis — NAO ha memoria cross-worker.</Text>
       <Text> </Text>
-
-      <Text bold color="cyan">Variaveis Reservadas (preenchidas automaticamente)</Text>
-      <Text> </Text>
+      <Text bold color="cyan">Variaveis Reservadas</Text>
       <Text dimColor>  <Text color="white" bold>$task</Text>    Descricao da subtask atribuida ao worker pelo DAG.</Text>
-      <Text dimColor>           Pode ser sobrescrita por langchain_prompt ou set_variable.</Text>
-      <Text dimColor>           Origem: preenchida pelo runtime antes do primeiro step.</Text>
+      <Text dimColor>  <Text color="white" bold>$diff</Text>    Diff do worktree (preenchida por git_diff).</Text>
+      <Text dimColor>  <Text color="white" bold>$error</Text>   Ultimo erro (preenchida automaticamente).</Text>
       <Text> </Text>
-      <Text dimColor>  <Text color="white" bold>$diff</Text>    Diff do worktree do worker no momento da coleta.</Text>
-      <Text dimColor>           Atualizada APENAS pelo step git_diff.</Text>
-      <Text dimColor>           Comeca vazia — use git_diff para preencher.</Text>
-      <Text> </Text>
-      <Text dimColor>  <Text color="white" bold>$error</Text>   Ultimo erro tecnico ou de negocio.</Text>
-      <Text dimColor>           Preenchida automaticamente pelo runtime quando um step falha.</Text>
-      <Text dimColor>           Pode ser usada em templates para contexto de erro.</Text>
-      <Text> </Text>
-
       <Text bold color="cyan">Variaveis Custom ($custom_*)</Text>
-      <Text> </Text>
-      <Text dimColor>  <Text color="white" bold>Como CRIAR:</Text></Text>
-      <Text dimColor>  1. No perfil: adicione em "initialVariables" com valor inicial</Text>
-      <Text dimColor>     Ex: custom_tries = 0, custom_pass = false</Text>
-      <Text dimColor>  2. Via set_variable: define/atualiza qualquer $custom_* em runtime</Text>
-      <Text dimColor>  3. Via langchain_prompt: a resposta do LLM e salva no outputTarget</Text>
-      <Text> </Text>
-      <Text dimColor>  <Text color="white" bold>Como LER:</Text></Text>
+      <Text dimColor>  Criadas via initialVariables, set_variable, ou langchain_prompt.</Text>
       <Text dimColor>  Use $custom_nome em qualquer template de step.</Text>
-      <Text dimColor>  Ex: "Fix code to pass: $task (tentativa $custom_tries)"</Text>
-      <Text dimColor>  Se a variavel nao existir, $custom_nome permanece literal no texto.</Text>
-      <Text> </Text>
-
-      <Text bold color="cyan">Quem pode CRIAR/MODIFICAR variaveis?</Text>
-      <Text> </Text>
-      <Box flexDirection="column" paddingX={2}>
-        <Text>  <Text color="blue">{'\u{1F4DD}'} set_variable</Text>   {'\u2714'} Cria e modifica qualquer variavel</Text>
-        <Text>  <Text color="magenta">{'\u{1F4AC}'} langchain_prompt</Text> {'\u2714'} Escreve resposta no outputTarget</Text>
-        <Text>  <Text color="white">{'\u{1F4CB}'} git_diff</Text>         {'\u2714'} Escreve diff na variavel target</Text>
-        <Text>  <Text color="green">{'\u{1F916}'} pi_agent</Text>         {'\u2716'} <Text color="red">NAO modifica variaveis</Text></Text>
-        <Text dimColor>                       (opera apenas no filesystem do worktree)</Text>
-        <Text>  <Text color="yellow">{'\u{1F500}'} condition</Text>        {'\u2716'} Apenas le para decidir caminho</Text>
-        <Text>  <Text color="cyan">{'\u27A1\uFE0F'}  goto</Text>             {'\u2716'} Apenas redireciona fluxo</Text>
-        <Text>  <Text color="red">{'\u{1F6D1}'} fail</Text>             {'\u2716'} Apenas encerra com erro</Text>
-      </Box>
-      <Text> </Text>
-
-      <Text bold color="cyan">Expressoes suportadas</Text>
-      <Text dimColor>  Condicoes: $var == valor  |  $var != valor  |  $var {'>='}  {'<='} {'>'} {'<'}</Text>
-      <Text dimColor>  Aritmetica: $var + N  |  $var - N  |  $var * N  |  $var / N</Text>
     </Box>
   );
 }
@@ -415,40 +388,18 @@ function GuideExamples() {
   return (
     <Box flexDirection="column">
       <Text bold color="yellow">Exemplo: test-driven-fixer</Text>
-      <Text dimColor>  Pipeline que gera testes, corrige, valida e reformula se necessario.</Text>
-      <Text> </Text>
-      <Text dimColor>  Variaveis iniciais: custom_tries = 0</Text>
+      <Text dimColor>  Pipeline que gera testes, corrige, valida e reformula.</Text>
       <Text> </Text>
       <Text color="blue">  [1] set_variable    $custom_tries = $custom_tries + 1</Text>
-      <Text dimColor>   {'\u2502'}</Text>
       <Text color="green">  [2] pi_agent        "Write tests for: $task"</Text>
-      <Text dimColor>   {'\u2502'}</Text>
       <Text color="green">  [3] pi_agent        "Fix code to pass tests: $task"</Text>
-      <Text dimColor>   {'\u2502'}</Text>
       <Text color="yellow">  [4] condition       $custom_tries {'>'}= 3</Text>
-      <Text dimColor>   {'\u251C'}<Text color="green">{'\u2714'} true</Text> {'\u2192'} [done] goto __end__</Text>
-      <Text dimColor>   {'\u2514'}<Text color="red">{'\u2716'} false</Text> {'\u2192'} [5] set_variable (incrementa tries, volta p/ [2])</Text>
+      <Text dimColor>       true {'\u2192'} __end__  |  false {'\u2192'} volta p/ [1]</Text>
       <Text> </Text>
-
-      <Text bold color="yellow">Exemplo: code-review-loop</Text>
-      <Text dimColor>  Pipeline que implementa, revisa via LLM e corrige ate aprovacao.</Text>
-      <Text> </Text>
-      <Text color="green">  [1] pi_agent        "Implement: $task"</Text>
-      <Text dimColor>   {'\u2502'}</Text>
-      <Text color="white">  [2] git_diff        {'\u2192'} $diff</Text>
-      <Text dimColor>   {'\u2502'}</Text>
-      <Text color="magenta">  [3] langchain_prompt "Review this diff: $diff" {'\u2192'} $custom_review</Text>
-      <Text dimColor>   {'\u2502'}</Text>
-      <Text color="yellow">  [4] condition       $custom_review == approved</Text>
-      <Text dimColor>   {'\u251C'}<Text color="green">{'\u2714'} true</Text> {'\u2192'} __end__</Text>
-      <Text dimColor>   {'\u2514'}<Text color="red">{'\u2716'} false</Text> {'\u2192'} [5] pi_agent "Fix issues: $custom_review"</Text>
-      <Text> </Text>
-
       <Text bold color="yellow">Dica: Comece simples</Text>
-      <Text dimColor>  1. Crie um perfil com 2-3 steps para testar o conceito</Text>
+      <Text dimColor>  1. Crie um perfil com 2-3 steps para testar</Text>
       <Text dimColor>  2. Use initialVariables para contadores de loop</Text>
-      <Text dimColor>  3. Sempre inclua uma condicao de saida para evitar loops infinitos</Text>
-      <Text dimColor>  4. Use git_diff antes de langchain_prompt para analisar mudancas</Text>
+      <Text dimColor>  3. Sempre inclua condicao de saida</Text>
     </Box>
   );
 }

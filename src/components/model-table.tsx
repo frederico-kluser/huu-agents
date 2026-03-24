@@ -12,14 +12,11 @@ interface ModelTableProps {
 
 const HEADER_LINES = 6;
 
-const speedColor = (s: number): string =>
-  s >= 150 ? 'green' : s >= 50 ? 'yellow' : 'red';
+const priceColor = (price: number): string | undefined =>
+  price <= 0.5 ? 'green' : price <= 5 ? 'yellow' : 'red';
 
-const sweColor = (s: number | null): string | undefined =>
-  s === null ? undefined : s >= 78 ? 'green' : s >= 70 ? 'yellow' : undefined;
-
-const pcColor = (r: number): string | undefined =>
-  r >= 200 ? 'green' : r >= 50 ? 'yellow' : undefined;
+const ctxColor = (k: number): string | undefined =>
+  k >= 200 ? 'green' : k >= 100 ? 'yellow' : undefined;
 
 const pad = (str: string, len: number): string =>
   str.length >= len ? str.slice(0, len) : str + ' '.repeat(len - str.length);
@@ -28,12 +25,13 @@ const padR = (str: string, len: number): string =>
   str.length >= len ? str.slice(0, len) : ' '.repeat(len - str.length) + str;
 
 /**
- * Tabela filtrável de modelos LLM para seleção no terminal.
+ * Tabela filtrável de modelos LLM da OpenRouter para seleção no terminal.
+ * Exibe: Nome, Provider, Contexto, Preço In/Out, Tools, Reasoning, Moderado.
  * Suporta filtro por texto, navegação j/k, e seleção via Enter.
  *
  * @example
  * ```tsx
- * <ModelTable models={getPlannerModels()} onSelect={handleSelect} title="Planner" />
+ * <ModelTable models={allModels} onSelect={handleSelect} title="Selecionar Modelo" />
  * ```
  */
 export const ModelTable = ({ models, onSelect, title }: ModelTableProps) => {
@@ -49,7 +47,8 @@ export const ModelTable = ({ models, onSelect, title }: ModelTableProps) => {
       (m) =>
         m.name.toLowerCase().includes(q) ||
         m.provider.toLowerCase().includes(q) ||
-        m.id.toLowerCase().includes(q),
+        m.id.toLowerCase().includes(q) ||
+        m.tokenizer.toLowerCase().includes(q),
     );
   }, [models, filter]);
 
@@ -75,15 +74,17 @@ export const ModelTable = ({ models, onSelect, title }: ModelTableProps) => {
         {title && <Text bold color="cyan">{title}</Text>}
         <Box marginTop={1}>
           <Text dimColor>Filtro: </Text>
-          <TextInput value={filter} onChange={(v) => { setFilter(v); setCursor(0); }} placeholder="nome, provider ou id..." />
+          <TextInput value={filter} onChange={(v) => { setFilter(v); setCursor(0); }} placeholder="nome, provider, id ou tokenizer..." />
         </Box>
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
         <Box>
-          <Text dimColor>{pad('Nome', 22)}{pad('Provider', 12)}{padR('t/s', 5)} {padR('Ctx', 5)} {padR('$In', 6)} {padR('$Out', 6)} {padR('SWE%', 6)} {padR('P/C', 5)}</Text>
+          <Text dimColor>
+            {pad('Nome', 28)}{pad('Provider', 14)}{padR('Ctx', 6)} {padR('$In/M', 8)} {padR('$Out/M', 8)} {padR('Tools', 5)} {padR('Reas', 5)} {padR('Mod', 3)}
+          </Text>
         </Box>
-        <Text dimColor>{'─'.repeat(72)}</Text>
+        <Text dimColor>{'─'.repeat(82)}</Text>
 
         {visible.map((m, i) => {
           const idx = scrollOffset + i;
@@ -91,24 +92,26 @@ export const ModelTable = ({ models, onSelect, title }: ModelTableProps) => {
           return (
             <Box key={m.id}>
               <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : undefined}>
-                {pad(m.name, 22)}
-                {pad(m.provider, 12)}
+                {pad(m.name.slice(0, 27), 28)}
+                {pad(m.provider.slice(0, 13), 14)}
               </Text>
-              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : speedColor(m.speed)}>
-                {padR(String(m.speed), 5)}
+              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : ctxColor(m.contextWindow)}>
+                {padR(formatContext(m.contextWindow), 6)}
               </Text>
-              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : undefined}>
-                {' '}{padR(formatContext(m.contextWindow), 5)}
+              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : priceColor(m.inputPrice)} dimColor={!active}>
+                {' '}{padR(formatPrice(m.inputPrice), 8)}
+              </Text>
+              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : priceColor(m.outputPrice)} dimColor={!active}>
+                {' '}{padR(formatPrice(m.outputPrice), 8)}
+              </Text>
+              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : m.hasTools ? 'green' : undefined}>
+                {' '}{padR(m.hasTools ? 'Y' : '-', 5)}
+              </Text>
+              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : m.hasReasoning ? 'green' : undefined}>
+                {' '}{padR(m.hasReasoning ? 'Y' : '-', 5)}
               </Text>
               <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : undefined} dimColor={!active}>
-                {' '}{padR(formatPrice(m.inputPrice), 6)}
-                {' '}{padR(formatPrice(m.outputPrice), 6)}
-              </Text>
-              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : sweColor(m.sweBench)}>
-                {' '}{padR(m.sweBench !== null ? `${m.sweBench}%` : '—', 6)}
-              </Text>
-              <Text backgroundColor={active ? 'cyan' : undefined} color={active ? 'black' : pcColor(m.perfCostRatio)} bold={!active && m.perfCostRatio >= 200}>
-                {' '}{padR(String(m.perfCostRatio), 5)}
+                {' '}{padR(m.isModerated ? 'Y' : '-', 3)}
               </Text>
               {active && <Text> {'<'}</Text>}
             </Box>

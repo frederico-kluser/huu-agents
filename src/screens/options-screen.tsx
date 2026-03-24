@@ -12,6 +12,7 @@ import Spinner from 'ink-spinner';
 import SelectInput from 'ink-select-input';
 import { ModelTable } from '../components/model-table.js';
 import { ProfileBuilderScreen } from './profile-builder-screen.js';
+import { AiPipelineBuilderScreen } from './ai-pipeline-builder-screen.js';
 import { useModels } from '../hooks/use-models.js';
 import { findModel, formatPrice } from '../data/models.js';
 import type { ModelEntry } from '../data/models.js';
@@ -20,7 +21,7 @@ import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
 import { validateProfileReferences } from '../schemas/worker-profile.schema.js';
 import { saveProfile } from '../services/profile-catalog.js';
 
-type OptionsPhase = 'menu' | 'planner-model' | 'worker-model' | 'create-profile' | 'guide';
+type OptionsPhase = 'menu' | 'planner-model' | 'worker-model' | 'create-profile' | 'ai-pipeline' | 'guide';
 
 interface OptionsScreenProps {
   /** Config atual (para exibir e atualizar modelos) */
@@ -155,6 +156,18 @@ export const OptionsScreen = ({
     );
   }
 
+  // --- AI pipeline builder ---
+  if (phase === 'ai-pipeline') {
+    return (
+      <AiPipelineBuilderScreen
+        onSave={(profile) => void handleProfileSave(profile)}
+        onCancel={() => setPhase('menu')}
+        apiKey={config.openrouterApiKey}
+        models={allModels}
+      />
+    );
+  }
+
   // --- Guide / Reference ---
   if (phase === 'guide') {
     return <GuideScreen onBack={() => setPhase('menu')} />;
@@ -173,6 +186,10 @@ export const OptionsScreen = ({
     {
       label: '\u{1F527}  Criar Pipeline Profile',
       value: 'create-profile',
+    },
+    {
+      label: '\u{1F916}  Criar Pipeline com IA',
+      value: 'ai-pipeline',
     },
     {
       label: '\u{1F4D6}  Guia de Referencia',
@@ -212,6 +229,11 @@ export const OptionsScreen = ({
           <Text dimColor>  Crie fluxos com IA, condicoes, loops e variaveis compartilhadas.</Text>
         </Box>
         <Box flexDirection="column" marginBottom={1}>
+          <Text bold color="yellow">{'\u{1F916}'} Pipeline com IA</Text>
+          <Text dimColor>  Descreva o que voce quer e a IA gera o pipeline automaticamente.</Text>
+          <Text dimColor>  Usa DeepSeek por padrao, trocavel para qualquer modelo LangChain.</Text>
+        </Box>
+        <Box flexDirection="column" marginBottom={1}>
           <Text bold color="yellow">{'\u{1F4D6}'} Guia de Referencia</Text>
           <Text dimColor>  Documentacao completa sobre step types, variaveis e exemplos.</Text>
         </Box>
@@ -232,6 +254,7 @@ export const OptionsScreen = ({
               case 'planner': setPhase('planner-model'); break;
               case 'worker': setPhase('worker-model'); break;
               case 'create-profile': setPhase('create-profile'); break;
+              case 'ai-pipeline': setPhase('ai-pipeline'); break;
               case 'guide': setPhase('guide'); break;
               case 'back': onBack(); break;
             }

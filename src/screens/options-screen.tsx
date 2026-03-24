@@ -8,14 +8,11 @@
 
 import { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
-import Spinner from 'ink-spinner';
 import SelectInput from 'ink-select-input';
-import { ModelTable } from '../components/model-table.js';
+import { ModelSelector } from '../components/model-selector.js';
 import { ProfileBuilderScreen } from './profile-builder-screen.js';
 import { AiPipelineBuilderScreen } from './ai-pipeline-builder-screen.js';
-import { useModels } from '../hooks/use-models.js';
 import { findModel, formatPrice } from '../data/models.js';
-import type { ModelEntry } from '../data/models.js';
 import type { Config } from '../schemas/config.schema.js';
 import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
 import { validateProfileReferences } from '../schemas/worker-profile.schema.js';
@@ -60,27 +57,26 @@ export const OptionsScreen = ({
 }: OptionsScreenProps) => {
   const [phase, setPhase] = useState<OptionsPhase>('menu');
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const { state: modelsState } = useModels(config.openrouterApiKey);
 
-  const handlePlannerSelect = useCallback((model: ModelEntry) => {
+  const handlePlannerSelect = useCallback((modelId: string) => {
     const updated: Config = {
       ...config,
-      plannerModel: model.id,
-      selectedAgents: { ...config.selectedAgents, planner: model.id },
+      plannerModel: modelId,
+      selectedAgents: { ...config.selectedAgents, planner: modelId },
     };
     onConfigChange(updated);
-    setSaveMessage(`Planner atualizado: ${model.name}`);
+    setSaveMessage(`Planner atualizado: ${modelId}`);
     setPhase('menu');
   }, [config, onConfigChange]);
 
-  const handleWorkerSelect = useCallback((model: ModelEntry) => {
+  const handleWorkerSelect = useCallback((modelId: string) => {
     const updated: Config = {
       ...config,
-      workerModel: model.id,
-      selectedAgents: { ...config.selectedAgents, worker: model.id },
+      workerModel: modelId,
+      selectedAgents: { ...config.selectedAgents, worker: modelId },
     };
     onConfigChange(updated);
-    setSaveMessage(`Worker atualizado: ${model.name}`);
+    setSaveMessage(`Worker atualizado: ${modelId}`);
     setPhase('menu');
   }, [config, onConfigChange]);
 
@@ -101,47 +97,28 @@ export const OptionsScreen = ({
     setPhase('menu');
   }, [projectRoot]);
 
-  const allModels = modelsState.status === 'loaded' ? modelsState.models : [];
-
-  // --- Loading models ---
-  if ((phase === 'planner-model' || phase === 'worker-model') && modelsState.status === 'loading') {
-    return (
-      <Box flexDirection="column" padding={1}>
-        <Box gap={1}>
-          <Text color="green"><Spinner type="dots" /></Text>
-          <Text>Carregando modelos da OpenRouter...</Text>
-        </Box>
-      </Box>
-    );
-  }
-
-  if ((phase === 'planner-model' || phase === 'worker-model') && modelsState.status === 'error') {
-    return (
-      <Box flexDirection="column" padding={1}>
-        <Text color="red">Erro ao carregar modelos: {modelsState.error}</Text>
-        <Text dimColor>Pressione ESC para voltar</Text>
-      </Box>
-    );
-  }
-
-  // --- Planner model selection ---
+  // --- Planner model selection (uses ModelSelector DRY component) ---
   if (phase === 'planner-model') {
     return (
-      <ModelTable
-        models={allModels}
+      <ModelSelector
+        apiKey={config.openrouterApiKey}
         onSelect={handlePlannerSelect}
-        title={`Selecionar Modelo Planner (${allModels.length} modelos)`}
+        onCancel={() => setPhase('menu')}
+        title="Selecionar Modelo Planner"
+        subtitle={`Atual: ${config.selectedAgents.planner}`}
       />
     );
   }
 
-  // --- Worker model selection ---
+  // --- Worker model selection (uses ModelSelector DRY component) ---
   if (phase === 'worker-model') {
     return (
-      <ModelTable
-        models={allModels}
+      <ModelSelector
+        apiKey={config.openrouterApiKey}
         onSelect={handleWorkerSelect}
-        title={`Selecionar Modelo Worker (${allModels.length} modelos)`}
+        onCancel={() => setPhase('menu')}
+        title="Selecionar Modelo Worker"
+        subtitle={`Atual: ${config.selectedAgents.worker}`}
       />
     );
   }
@@ -205,9 +182,7 @@ export const OptionsScreen = ({
       <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
         <Text bold color="cyan">{'\u2699\uFE0F'}  Opcoes</Text>
         <Text dimColor>Configure modelos, crie pipelines e consulte o guia de referencia.</Text>
-        {modelsState.status === 'loaded' && (
-          <Text dimColor>{modelsState.models.length} modelos disponiveis via OpenRouter</Text>
-        )}
+        <Text dimColor>Catalogo completo de modelos OpenRouter disponivel</Text>
       </Box>
 
       {/* Descricoes das opcoes */}

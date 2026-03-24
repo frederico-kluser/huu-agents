@@ -2,7 +2,7 @@
  * Tela de criação de pipeline via IA.
  * O usuário descreve o que deseja em linguagem natural;
  * duas chamadas LLM geram o perfil completo automaticamente.
- * Escolhas do usuário: scope (local/global) e seats (paralelismo).
+ * Escolhas do usuário: scope (local/global), seats, modelo LLM (catálogo OpenRouter completo).
  *
  * @module
  */
@@ -12,6 +12,7 @@ import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import SelectInput from 'ink-select-input';
 import { MultiLineInput } from '../components/multi-line-input.js';
+import { ModelSelector } from '../components/model-selector.js';
 import {
   generatePipeline,
   DEFAULT_BUILDER_MODEL,
@@ -46,17 +47,6 @@ const SCOPE_OPTIONS = [
   { label: 'Global (todos os projetos — ~/.pi-dag-cli/)', value: 'global' as ProfileScope },
 ];
 
-const MODEL_OPTIONS = [
-  { label: 'DeepSeek Chat (default)', value: 'deepseek/deepseek-chat' },
-  { label: 'DeepSeek V3', value: 'deepseek/deepseek-chat-v3-0324' },
-  { label: 'GPT-4.1 Mini', value: 'openai/gpt-4.1-mini' },
-  { label: 'GPT-4.1', value: 'openai/gpt-4.1' },
-  { label: 'Claude Sonnet 4.6', value: 'anthropic/claude-sonnet-4-6' },
-  { label: 'Claude Haiku 4.5', value: 'anthropic/claude-haiku-4-5-20251001' },
-  { label: 'Gemini 2.5 Flash', value: 'google/gemini-2.5-flash-preview' },
-  { label: 'Qwen3 235B', value: 'qwen/qwen3-235b-a22b' },
-];
-
 const STEP_ICONS: Record<string, string> = {
   pi_agent: '\u{1F916}', langchain_prompt: '\u{1F4AC}', condition: '\u{1F500}',
   goto: '\u27A1\uFE0F', set_variable: '\u{1F4DD}', git_diff: '\u{1F4CB}', fail: '\u{1F6D1}',
@@ -79,7 +69,7 @@ const truncate = (s: string, max: number): string =>
 
 /**
  * Tela de criação de pipeline via IA.
- * Fluxo: descrição → scope → seats → modelo → geração → preview.
+ * Fluxo: descrição → scope → seats → modelo (catálogo completo) → geração → preview.
  *
  * @example
  * <AiPipelineBuilderScreen
@@ -98,12 +88,10 @@ export const AiPipelineBuilderScreen = ({
   const [generatedProfile, setGeneratedProfile] = useState<WorkerProfile | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // ESC handling para fases que não têm input próprio (scope, seats, model).
-  // description: MultiLineInput cuida do ESC internamente.
-  // generating: sem cancelamento. preview/error: handlers próprios.
+  // ESC handling para fases que não têm input próprio.
   useInput((_input, key) => {
     if (key.escape && phase !== 'generating' && phase !== 'description'
-        && phase !== 'preview' && phase !== 'error') {
+        && phase !== 'preview' && phase !== 'error' && phase !== 'model') {
       onCancel();
     }
   });
@@ -149,11 +137,18 @@ export const AiPipelineBuilderScreen = ({
 
   if (phase === 'model') {
     return (
-      <SelectPhase title="Modelo LLM para gerar a pipeline:" description={description}
-        subtitle="O modelo interpreta sua descrição e gera os steps."
-        items={MODEL_OPTIONS}
-        onSelect={(item) => { setModel(item.value); void startGeneration(item.value); }}
-      />
+      <Box flexDirection="column" padding={1}>
+        <Header description={description} />
+        <Box marginTop={1}>
+          <ModelSelector
+            apiKey={apiKey}
+            onSelect={(modelId) => { setModel(modelId); void startGeneration(modelId); }}
+            onCancel={onCancel}
+            title="Modelo LLM para gerar a pipeline"
+            subtitle="O modelo interpreta sua descrição e gera os steps automaticamente."
+          />
+        </Box>
+      </Box>
     );
   }
 
@@ -202,7 +197,7 @@ function DescriptionPhase({ onSubmit, onCancel }: {
         <Text dimColor>Exemplos:</Text>
         <Text dimColor>  {'\u2022'} "Escrever testes, corrigir código, repetir até 3 vezes"</Text>
         <Text dimColor>  {'\u2022'} "Implementar, revisar com IA, aplicar correções"</Text>
-        <Text dimColor>  {'\u2022'} "Planejar abordagem, implementar, validar com lint e testes"</Text>
+        <Text dimColor>  {'\u2022'} "Analisar se precisa refatorar, se sim refatorar"</Text>
       </Box>
       <Box marginTop={1} paddingX={1}>
         <MultiLineInput

@@ -40,6 +40,7 @@ src/
 │   ├── task-screen.tsx              # Input da macro-task
 │   ├── options-screen.tsx           # [o] Opcoes: modelos individuais + criar pipelines
 │   ├── profile-select-screen.tsx    # Seleção de perfil antes da execução
+│   ├── pipeline-generator-screen.tsx # Geração de pipeline via IA (LangChain)
 │   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis (via opcoes)
 │   ├── dag-view-screen.tsx          # Visualização do DAG
 │   ├── execution-screen.tsx         # Dashboard de execução real-time
@@ -49,8 +50,9 @@ src/
 │   ├── model-table.tsx              # Tabela filtrável de modelos OpenRouter
 │   ├── status-bar.tsx               # Barra informacional de modelos atuais
 │   ├── pipeline-trace.tsx           # Trace step-by-step de pipeline
+│   ├── pipeline-git-graph.tsx       # Visualização git tree graph de pipelines
 │   ├── dag-node-row.tsx, tree-node.tsx, worker-log.tsx
-├── prompts/                         # Planner, Explorer, Worker (adaptados por provider)
+├── prompts/                         # Planner, Explorer, Worker, PipelineGenerator (adaptados por provider)
 ├── agents/                          # Explorer ReAct (LangChain), Worker Runner (Pi SDK)
 ├── pipeline/
 │   ├── orchestrator.ts              # Pipeline end-to-end (planner → DAG → workers)
@@ -66,13 +68,14 @@ src/
 │       ├── control-handlers.ts      # condition, goto, set_variable, fail
 │       └── git-diff-handler.ts      # git_diff (captura diff do worktree)
 ├── services/
-│   └── profile-catalog.ts           # Persistência de perfis (global + local, Result<T>)
+│   ├── profile-catalog.ts           # Persistência de perfis (global + local, Result<T>)
+│   └── pipeline-generator.ts        # Geração de pipelines via LangChain (2 chamadas LLM)
 ├── git/                             # git-wrapper, worktree-manager, conflict-resolver
 ├── hooks/                           # use-config, use-file-tree, use-api-validation, use-elapsed-time, use-models
 └── utils/                           # file-tree, path-guard
 ```
 
-55 arquivos, ~7.000 LOC (~127 LOC/arquivo).
+59 arquivos, ~7.800 LOC (~132 LOC/arquivo).
 
 ## Worker Pipeline Profiles
 
@@ -88,7 +91,9 @@ Perfis definem pipelines multi-step dentro de cada worker. O DAG permanece como 
 
 **Schema do perfil:** `id` em kebab-case como label principal, `seats` (1-16) para limitar concorrência por perfil e `initialVariables` para seed de variáveis `custom_*`.
 
-**Atalho [o] opcoes:** acessível de qualquer tela (exceto config/loading/executing). Permite trocar modelo planner ou worker individualmente (catálogo completo de 18 modelos) e criar pipeline profiles. Legenda `[o] opcoes` aparece no rodapé de cada tela.
+**Atalho [o] opcoes:** acessível de qualquer tela (exceto config/loading/executing). Permite trocar modelo planner ou worker individualmente (catálogo completo de 18 modelos), gerar pipelines com IA ou criar pipeline profiles manualmente. Legenda `[o] opcoes` aparece no rodapé de cada tela.
+
+**Geração de pipeline com IA:** `[o] → Gerar Pipeline com IA`. Usuário descreve o pipeline em linguagem natural, escolhe escopo (local/global) e seats. Duas chamadas LLM via LangChain (ChatOpenAI + OpenRouter): (1) gera steps do pipeline, (2) gera metadados (id, descrição). Modelo default: `deepseek/deepseek-chat`, configurável para qualquer modelo suportado. Preview com visualização git tree graph antes de salvar.
 
 **Validação:** Zod `superRefine` (entryStepId, set_variable XOR, step IDs duplicados, namespace de initialVariables) + `validateProfileReferences()` (integridade referencial de targets)
 

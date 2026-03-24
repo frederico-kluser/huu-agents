@@ -10,7 +10,7 @@ import { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
 import { listProfiles } from '../services/profile-catalog.js';
-import { PipelineGraph } from '../components/pipeline-graph.js';
+import { PipelineGitGraph } from '../components/pipeline-git-graph.js';
 import { findStepTypeInfo } from '../components/step-field-defs.js';
 
 interface ProfileSelectScreenProps {
@@ -176,13 +176,12 @@ export const ProfileSelectScreen = ({ projectRoot, onSelect }: ProfileSelectScre
                     </Box>
                   )}
 
-                  {/* Mini pipeline tree preview */}
+                  {/* Mini pipeline git graph preview */}
                   <Box marginTop={1} flexDirection="column">
                     <Text bold dimColor>Pipeline:</Text>
-                    <PipelineGraph
+                    <PipelineGitGraph
                       steps={[...profile.steps]}
-                      selectedStepId={null}
-                      compact
+                      entryStepId={profile.entryStepId}
                     />
                   </Box>
                 </Box>
@@ -195,7 +194,7 @@ export const ProfileSelectScreen = ({ projectRoot, onSelect }: ProfileSelectScre
       {profiles.length === 0 && (
         <Box marginTop={1} flexDirection="column" paddingX={2}>
           <Text dimColor>Nenhum perfil encontrado.</Text>
-          <Text dimColor>Use <Text color="white">[o] opcoes</Text> {'\u2192'} Criar Pipeline Profile para criar o primeiro.</Text>
+          <Text dimColor>Use <Text color="white">[o] opcoes</Text> {'\u2192'} Gerar Pipeline com IA ou Criar Pipeline Profile.</Text>
           <Text dimColor>Perfis locais: .pi-dag/worker-profiles.json</Text>
           <Text dimColor>Perfis globais: ~/.pi-dag-cli/worker-profiles.json</Text>
         </Box>

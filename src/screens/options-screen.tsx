@@ -12,6 +12,7 @@ import Spinner from 'ink-spinner';
 import SelectInput from 'ink-select-input';
 import { ModelTable } from '../components/model-table.js';
 import { ProfileBuilderScreen } from './profile-builder-screen.js';
+import { PipelineGeneratorScreen } from './pipeline-generator-screen.js';
 import { useModels } from '../hooks/use-models.js';
 import { findModel, formatPrice } from '../data/models.js';
 import type { ModelEntry } from '../data/models.js';
@@ -20,7 +21,7 @@ import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
 import { validateProfileReferences } from '../schemas/worker-profile.schema.js';
 import { saveProfile } from '../services/profile-catalog.js';
 
-type OptionsPhase = 'menu' | 'planner-model' | 'worker-model' | 'create-profile' | 'guide';
+type OptionsPhase = 'menu' | 'planner-model' | 'worker-model' | 'create-profile' | 'generate-pipeline' | 'guide';
 
 interface OptionsScreenProps {
   /** Config atual (para exibir e atualizar modelos) */
@@ -155,6 +156,18 @@ export const OptionsScreen = ({
     );
   }
 
+  // --- AI pipeline generator ---
+  if (phase === 'generate-pipeline') {
+    return (
+      <PipelineGeneratorScreen
+        apiKey={config.openrouterApiKey}
+        model={config.selectedAgents.worker}
+        onSave={(profile) => void handleProfileSave(profile)}
+        onCancel={() => setPhase('menu')}
+      />
+    );
+  }
+
   // --- Guide / Reference ---
   if (phase === 'guide') {
     return <GuideScreen onBack={() => setPhase('menu')} />;
@@ -171,7 +184,11 @@ export const OptionsScreen = ({
       value: 'worker',
     },
     {
-      label: '\u{1F527}  Criar Pipeline Profile',
+      label: '\u{2728}  Gerar Pipeline com IA',
+      value: 'generate-pipeline',
+    },
+    {
+      label: '\u{1F527}  Criar Pipeline Profile (manual)',
       value: 'create-profile',
     },
     {
@@ -207,9 +224,14 @@ export const OptionsScreen = ({
           <Text dimColor>  Modelos rapidos funcionam bem para tarefas simples.</Text>
         </Box>
         <Box flexDirection="column" marginBottom={1}>
-          <Text bold color="yellow">{'\u{1F527}'} Pipeline Profile</Text>
-          <Text dimColor>  Transforma workers de executores one-shot em pipelines multi-step.</Text>
-          <Text dimColor>  Crie fluxos com IA, condicoes, loops e variaveis compartilhadas.</Text>
+          <Text bold color="yellow">{'\u2728'} Gerar Pipeline com IA</Text>
+          <Text dimColor>  Descreva o que deseja em linguagem natural e a IA cria o pipeline.</Text>
+          <Text dimColor>  Gera steps, variaveis, nome e descricao automaticamente.</Text>
+        </Box>
+        <Box flexDirection="column" marginBottom={1}>
+          <Text bold color="yellow">{'\u{1F527}'} Pipeline Profile (manual)</Text>
+          <Text dimColor>  Crie pipelines manualmente com o wizard visual.</Text>
+          <Text dimColor>  Controle total sobre cada step, variavel e conexao.</Text>
         </Box>
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color="yellow">{'\u{1F4D6}'} Guia de Referencia</Text>
@@ -231,6 +253,7 @@ export const OptionsScreen = ({
             switch (item.value) {
               case 'planner': setPhase('planner-model'); break;
               case 'worker': setPhase('worker-model'); break;
+              case 'generate-pipeline': setPhase('generate-pipeline'); break;
               case 'create-profile': setPhase('create-profile'); break;
               case 'guide': setPhase('guide'); break;
               case 'back': onBack(); break;

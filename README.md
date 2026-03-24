@@ -185,9 +185,25 @@ Atalho `[o]` abre a tela de opcoes de qualquer tela (exceto config inicial, load
 A tela de opcoes permite:
 - **Modelo Planner** — selecao individual do catalogo completo de 18 modelos
 - **Modelo Worker** — selecao individual do catalogo completo de 18 modelos
-- **Criar Pipeline Profile** — wizard visual para montar perfis multi-step
+- **Gerar Pipeline com IA** — descreva o pipeline em linguagem natural e a IA cria tudo automaticamente
+- **Criar Pipeline Profile (manual)** — wizard visual para montar perfis multi-step
 
-Ao trocar modelo, a mudanca e salva imediatamente e o usuario permanece na tela de opcoes — pode trocar um ou ambos sem sair. Ao criar perfil, o wizard valida referencias antes de salvar.
+Ao trocar modelo, a mudanca e salva imediatamente e o usuario permanece na tela de opcoes — pode trocar um ou ambos sem sair. Ao criar perfil (manual ou IA), o wizard valida referencias antes de salvar.
+
+### Geracao de pipeline com IA
+
+O modo de geracao com IA permite criar pipelines completos a partir de uma descricao em linguagem natural. O fluxo e:
+
+1. Descreva o pipeline desejado (ex: "Pipeline que escreve testes, corrige codigo e repete ate passar")
+2. Escolha escopo: projeto (local) ou global
+3. Escolha seats (instancias em paralelo)
+4. A IA gera o pipeline em duas chamadas LLM:
+   - **Chamada 1**: Gera steps, variaveis, entry point e loop guard
+   - **Chamada 2**: Gera id e descricao a partir do pipeline gerado
+5. Preview com visualizacao git tree graph
+6. Confirme para salvar ou regenere
+
+O modelo default e `deepseek/deepseek-chat`, mas pode ser alterado via selecao de modelo worker em `[o] opcoes`. O prompt usa few-shot learning com 3 exemplos concretos (TDD loop, code review, pipeline simples) e e adaptado por provider (XML para Anthropic, Markdown para outros).
 
 ### Selecao de modelos
 
@@ -231,6 +247,7 @@ src/
 │   ├── task-screen.tsx              # Input da macro-task
 │   ├── options-screen.tsx           # [o] Opcoes: modelos individuais + criar pipelines
 │   ├── profile-select-screen.tsx    # Selecao de perfil antes da execucao
+│   ├── pipeline-generator-screen.tsx # Geracao de pipeline via IA (LangChain)
 │   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis (via opcoes)
 │   ├── dag-view-screen.tsx          # Visualizacao do DAG
 │   ├── execution-screen.tsx         # Dashboard de execucao real-time
@@ -240,13 +257,15 @@ src/
 │   ├── model-table.tsx              # Tabela filtravel de 18 modelos
 │   ├── status-bar.tsx               # Barra informacional de modelos atuais
 │   ├── pipeline-trace.tsx           # Trace step-by-step de execucao de pipeline
+│   ├── pipeline-git-graph.tsx       # Visualizacao git tree graph de pipelines
 │   ├── dag-node-row.tsx             # Linha de no do DAG
 │   ├── tree-node.tsx                # No da arvore de arquivos
 │   └── worker-log.tsx               # Log streaming por worker
 ├── prompts/
 │   ├── planner.ts                   # System prompt do Planner
 │   ├── explorer.prompt.ts           # System prompt do Explorer
-│   └── worker.prompt.ts             # Gerador de prompt por Worker
+│   ├── worker.prompt.ts             # Gerador de prompt por Worker
+│   └── pipeline-generator.prompt.ts # Prompts para geracao de pipeline com IA
 ├── agents/
 │   ├── explorer.agent.ts            # Sub-agente ReAct (LangChain)
 │   ├── explorer-tools.ts            # Tools read-only do Explorer
@@ -265,7 +284,8 @@ src/
 │       ├── control-handlers.ts      # condition, goto, set_variable, fail
 │       └── git-diff-handler.ts      # git_diff (captura diff do worktree)
 ├── services/
-│   └── profile-catalog.ts           # Persistencia de perfis (global + local, Result<T>)
+│   ├── profile-catalog.ts           # Persistencia de perfis (global + local, Result<T>)
+│   └── pipeline-generator.ts        # Geracao de pipelines via LangChain (2 chamadas LLM)
 ├── git/
 │   ├── git-types.ts                 # Tipos Result, GitError, CommitHash
 │   ├── git-wrapper.ts               # Operacoes Git atomicas (execFile)
@@ -282,7 +302,7 @@ src/
     └── path-guard.ts                # Protecao contra path traversal
 ```
 
-55 arquivos, ~7.000 LOC (media ~127 LOC/arquivo).
+59 arquivos, ~7.800 LOC (media ~132 LOC/arquivo).
 
 ## Padroes de codigo
 

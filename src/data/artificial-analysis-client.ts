@@ -83,6 +83,20 @@ let cachedAAModels: readonly AAModel[] | null = null;
 let aaCacheTimestamp = 0;
 
 /**
+ * Semeia o cache em memória com dados carregados do disco.
+ * Usado pelo sistema de cache offline para evitar fetch desnecessario.
+ * Nao sobrescreve cache existente que ainda esteja valido.
+ *
+ * @param models - Modelos AA previamente salvos em disco
+ * @param timestamp - Timestamp epoch de quando os dados foram salvos
+ */
+export const seedAACache = (models: readonly AAModel[], timestamp: number): void => {
+  if (cachedAAModels !== null && Date.now() - aaCacheTimestamp < CACHE_TTL_MS) return;
+  cachedAAModels = models;
+  aaCacheTimestamp = timestamp;
+};
+
+/**
  * Verifica se o cache AA ainda e valido.
  *
  * @returns true se cache existe e nao expirou

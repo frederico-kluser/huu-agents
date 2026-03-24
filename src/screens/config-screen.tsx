@@ -11,6 +11,9 @@ import type { Config } from '../schemas/config.schema.js';
 import { getApiErrorMessage } from '../schemas/errors.js';
 import { useArtificialAnalysis } from '../hooks/use-artificial-analysis.js';
 import { buildEnrichedModels } from '../data/enriched-model.js';
+import { saveGlobalCache } from '../services/offline-benchmark-cache.js';
+import { getCachedModels } from '../data/openrouter-client.js';
+import { getCachedAAModels } from '../data/artificial-analysis-client.js';
 
 type ConfigStep =
   | 'api-key'
@@ -75,13 +78,15 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
   const [concurrency, setConcurrency] = useState(String(existingConfig?.maxConcurrency ?? 4));
   const { validation, validate } = useApiValidation();
 
+  const [refreshing, setRefreshing] = useState(false);
+
   // Carrega modelos quando tem API key
   const activeApiKey = skipApiKey ? existingConfig?.openrouterApiKey : apiKey;
-  const { state: modelsState } = useModels(activeApiKey);
+  const { state: modelsState, forceRefresh: refreshOR } = useModels(activeApiKey);
 
   // Carrega dados AA se key disponivel
   const activeAaKey = skipApiKey ? existingConfig?.artificialAnalysisApiKey : (aaApiKey || undefined);
-  const { state: aaState } = useArtificialAnalysis(activeAaKey);
+  const { state: aaState, forceRefresh: refreshAA } = useArtificialAnalysis(activeAaKey);
 
   const handleApiKeySubmit = useCallback((value: string) => {
     if (!value.trim()) return;
@@ -102,10 +107,26 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
     setStep('planner-model');
   }
 
+  /** Atualiza dados de ambas as APIs e salva no cache global */
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([refreshOR(), refreshAA()]);
+      const orModels = getCachedModels();
+      const aaModels = getCachedAAModels();
+      if (orModels) await saveGlobalCache(orModels, aaModels ?? []);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshOR, refreshAA]);
+
   const enrichedModels = buildEnrichedModels(
     modelsState.status === 'loaded' ? modelsState.models : [],
     aaState.status === 'loaded' ? aaState.models : [],
   );
+
+  const cacheAge = (modelsState.status === 'loaded' ? modelsState.cacheAge : null)
+    ?? (aaState.status === 'loaded' ? aaState.cacheAge : null);
 
   const handlePlannerSelect = useCallback((model: EnrichedModel) => {
     setPlannerModelId(model.id);
@@ -226,6 +247,9 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
         onSelect={handlePlannerSelect}
         title={`Modelo Planner (${enrichedModels.length} modelos${hasAA ? ' + benchmarks AA' : ''})`}
         hasAAData={hasAA}
+        onRefresh={() => void handleRefresh()}
+        refreshing={refreshing}
+        cacheAge={cacheAge}
       />
     );
   }
@@ -241,6 +265,9 @@ export const ConfigScreen = ({ onComplete, skipApiKey, existingConfig }: ConfigS
           onSelect={handleWorkerSelect}
           title={`Modelo Worker (${enrichedModels.length} modelos${hasAA ? ' + benchmarks AA' : ''})`}
           hasAAData={hasAA}
+          onRefresh={() => void handleRefresh()}
+          refreshing={refreshing}
+          cacheAge={cacheAge}
         />
       </Box>
     );

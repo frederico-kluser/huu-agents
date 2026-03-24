@@ -14,7 +14,10 @@
     "dev": "tsc --watch",
     "start": "node dist/cli.js",
     "lint": "eslint src/",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "preaa:benchmarks": "npm run build -- --pretty false",
+    "aa:benchmarks": "node dist/scripts/list-aa-benchmarks.js",
+    "test:aa:benchmarks": "npm run build -- --pretty false && node --test dist/scripts/list-aa-benchmarks.test.js"
   },
   "dependencies": {
     "@langchain/core": "^1.1.34",

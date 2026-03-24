@@ -2,40 +2,52 @@
  * Tela de selecao de perfil de worker pipeline.
  * Exibe perfis disponiveis (global + local) com descricoes detalhadas
  * e preview da arvore de steps.
+ * Permite override de modelo antes da execução.
  *
  * @module
  */
 
 import { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
+import SelectInput from 'ink-select-input';
 import type { WorkerProfile } from '../schemas/worker-profile.schema.js';
 import { listProfiles } from '../services/profile-catalog.js';
 import { PipelineGraph } from '../components/pipeline-graph.js';
 import { findStepTypeInfo } from '../components/step-field-defs.js';
+import { ModelSelector } from '../components/model-selector.js';
+import type { ModelEntry } from '../data/models.js';
+
+/** Fase interna da tela */
+type Phase = 'select' | 'model-choice' | 'model-pick';
 
 interface ProfileSelectScreenProps {
   /** Caminho absoluto da raiz do projeto para carregar catalogos */
   readonly projectRoot: string;
-  /** Callback com perfil selecionado ou null (sem perfil) */
+  /** API key para carregar catálogo de modelos (necessário para override) */
+  readonly apiKey: string;
+  /** Callback com perfil selecionado (com model override) ou null (sem perfil) */
   readonly onSelect: (profile: WorkerProfile | null) => void;
 }
 
 /**
  * Tela de selecao de perfil antes da execucao.
  * Primeira opcao e sempre "No profile" para preservar comportamento atual.
- * Exibe preview da arvore do pipeline quando um perfil esta selecionado.
+ * Ao selecionar um perfil, pergunta se quer usar o modelo default ou escolher outro.
  *
  * @example
  * <ProfileSelectScreen
  *   projectRoot="/home/user/my-project"
+ *   apiKey="sk-or-..."
  *   onSelect={(profile) => startExecution(profile)}
  * />
  */
-export const ProfileSelectScreen = ({ projectRoot, onSelect }: ProfileSelectScreenProps) => {
+export const ProfileSelectScreen = ({ projectRoot, apiKey, onSelect }: ProfileSelectScreenProps) => {
   const [profiles, setProfiles] = useState<readonly WorkerProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<Phase>('select');
+  const [pendingProfile, setPendingProfile] = useState<WorkerProfile | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -54,6 +66,13 @@ export const ProfileSelectScreen = ({ projectRoot, onSelect }: ProfileSelectScre
   const totalItems = profiles.length + 1; // "No profile" + perfis
 
   useInput((input, key) => {
+    // ESC from model selection goes back to profile list
+    if (key.escape && (phase === 'model-choice' || phase === 'model-pick')) {
+      setPhase('select');
+      setPendingProfile(null);
+      return;
+    }
+    if (phase !== 'select') return;
     if (key.upArrow || input === 'k') {
       setSelectedIdx((prev) => (prev > 0 ? prev - 1 : totalItems - 1));
     }
@@ -65,10 +84,78 @@ export const ProfileSelectScreen = ({ projectRoot, onSelect }: ProfileSelectScre
         onSelect(null);
       } else {
         const profile = profiles[selectedIdx - 1];
-        if (profile) onSelect(profile);
+        if (profile) {
+          setPendingProfile(profile);
+          setPhase('model-choice');
+        }
       }
     }
   });
+
+  // ── Model choice phase: use default or pick from catalog ──
+  if (phase === 'model-choice' && pendingProfile) {
+    const defaultWorker = pendingProfile.workerModel ?? '(config global)';
+    const defaultLangchain = pendingProfile.langchainModel ?? '(config global)';
+
+    const modelChoiceItems = [
+      {
+        label: `Usar modelo default do perfil (Worker: ${defaultWorker}, LangChain: ${defaultLangchain})`,
+        value: 'default',
+      },
+      { label: 'Escolher outro modelo do catalogo OpenRouter', value: 'pick' },
+    ];
+
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
+          <Text bold color="cyan">{'\u{1F527}'} Modelo para execução do pipeline</Text>
+          <Text dimColor>Perfil: <Text color="white" bold>{pendingProfile.id}</Text></Text>
+          {pendingProfile.description && <Text dimColor>{pendingProfile.description}</Text>}
+        </Box>
+        <Box marginTop={1} flexDirection="column" paddingX={1}>
+          <Text bold color="yellow">Qual modelo usar para os steps de IA?</Text>
+          <Text dimColor>O modelo selecionado será usado para pi_agent e langchain_prompt.</Text>
+        </Box>
+        <Box marginTop={1}>
+          <SelectInput
+            items={modelChoiceItems}
+            onSelect={(item) => {
+              if (item.value === 'default') {
+                onSelect(pendingProfile);
+              } else {
+                setPhase('model-pick');
+              }
+            }}
+          />
+        </Box>
+        <Box paddingX={1}><Text dimColor>[ESC] voltar</Text></Box>
+      </Box>
+    );
+  }
+
+  // ── Model pick phase: full OpenRouter catalog ──
+  if (phase === 'model-pick' && pendingProfile) {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box borderStyle="round" borderColor="cyan" paddingX={2} flexDirection="column">
+          <Text bold color="cyan">{'\u{1F527}'} Escolher modelo para: {pendingProfile.id}</Text>
+          <Text dimColor>O modelo escolhido substituirá workerModel e langchainModel para esta execução.</Text>
+        </Box>
+        <ModelSelector
+          apiKey={apiKey}
+          onSelect={(model: ModelEntry) => {
+            const overridden: WorkerProfile = {
+              ...pendingProfile,
+              workerModel: model.id,
+              langchainModel: model.id,
+            };
+            onSelect(overridden);
+          }}
+          title="Selecionar modelo para execução"
+        />
+      </Box>
+    );
+  }
 
   if (loading) {
     return (

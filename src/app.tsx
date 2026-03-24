@@ -293,7 +293,7 @@ export const App = ({ cliArgs }: AppProps) => {
     return (
       <Box flexDirection="column">
         {statusBarEl}
-        <TaskScreen config={pipeline.config} contextFiles={[...pipeline.contextFiles]} onSubmit={handleTaskSubmit} initialTask={pipeline.macroTask} />
+        <TaskScreen config={pipeline.config} contextFiles={[...pipeline.contextFiles]} onSubmit={handleTaskSubmit} onCancel={() => setScreen('context')} initialTask={pipeline.macroTask} />
       </Box>
     );
   }
@@ -302,7 +302,7 @@ export const App = ({ cliArgs }: AppProps) => {
     return (
       <Box flexDirection="column">
         {statusBarEl}
-        <ProfileSelectScreen projectRoot={process.cwd()} onSelect={handleProfileSelect} />
+        <ProfileSelectScreen projectRoot={process.cwd()} apiKey={pipeline.config!.openrouterApiKey} onSelect={handleProfileSelect} />
       </Box>
     );
   }

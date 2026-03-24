@@ -1,79 +1,62 @@
-import { useState } from 'react';
-import { Box, Text, useInput } from 'ink';
-import TextInput from 'ink-text-input';
+/**
+ * Tela de input da macro-task com suporte multi-linha.
+ * Exibe resumo da configuração e aceita paste de conteúdo extenso.
+ *
+ * @module
+ */
+
+import { Box, Text } from 'ink';
+import { MultiLineInput } from '../components/multi-line-input.js';
 import type { Config } from '../schemas/config.schema.js';
 
 interface TaskScreenProps {
   readonly config: Config;
   readonly contextFiles: readonly string[];
   readonly onSubmit: (task: string) => void;
+  readonly onCancel: () => void;
   readonly initialTask?: string;
 }
 
 /**
- * Tela final de input onde o usuário digita a macro-task antes de iniciar o pipeline.
- * Exibe resumo da configuração (modelos, contexto) e valida que a task não está vazia.
+ * Tela de input onde o usuário digita a macro-task antes de iniciar o pipeline.
+ * Usa MultiLineInput para suportar paste de texto longo e descrições detalhadas.
+ * Exibe resumo da configuração (modelos, contexto) acima do input.
  *
  * @param props.config - Configuração validada do Pi DAG CLI
  * @param props.contextFiles - Lista de arquivos selecionados como contexto
- * @param props.onSubmit - Callback disparado com a task ao pressionar Enter
+ * @param props.onSubmit - Callback disparado com a task ao confirmar
+ * @param props.onCancel - Callback ao cancelar (ESC)
  *
  * @example
  * ```tsx
  * <TaskScreen
- *   config={{ openrouterApiKey: 'sk-or-...', plannerModel: 'openai/gpt-4.1', workerModel: 'openai/gpt-4.1-mini', worktreeBasePath: '.pi-dag-worktrees' }}
- *   contextFiles={['src/app.tsx', 'src/cli.tsx']}
+ *   config={cfg}
+ *   contextFiles={['src/app.tsx']}
  *   onSubmit={(task) => console.log('Iniciando:', task)}
+ *   onCancel={() => goBack()}
  * />
  * ```
  */
-export const TaskScreen = ({ config, contextFiles, onSubmit, initialTask = '' }: TaskScreenProps) => {
-  const [task, setTask] = useState(initialTask);
-  const [error, setError] = useState('');
-
-  const handleSubmit = (value: string) => {
-    const trimmed = value.trim();
-    if (trimmed.length === 0) {
-      setError('Task nao pode estar vazia. Descreva a macro-task.');
-      return;
-    }
-    setError('');
-    onSubmit(trimmed);
-  };
-
-  useInput((_input, key) => {
-    // Limpa erro ao digitar
-    if (error && !key.return) {
-      setError('');
-    }
-  });
-
+export const TaskScreen = ({ config, contextFiles, onSubmit, onCancel }: TaskScreenProps) => {
   return (
     <Box flexDirection="column" padding={1}>
       <ConfigSummary config={config} contextFileCount={contextFiles.length} />
 
       <Box flexDirection="column" marginTop={1}>
         <Text bold>Macro-task:</Text>
-        <Box marginTop={1}>
-          <Text color="cyan" bold>{'> '}</Text>
-          <TextInput
-            value={task}
-            onChange={setTask}
-            onSubmit={handleSubmit}
-            placeholder="Descreva a macro-task para decompor em DAG..."
-          />
-        </Box>
+        <Text dimColor>Descreva a tarefa com contexto detalhado. Suporta múltiplas linhas e paste.</Text>
+      </Box>
 
-        {error && (
-          <Box marginTop={1}>
-            <Text color="red">{error}</Text>
-          </Box>
-        )}
+      <Box marginTop={1}>
+        <MultiLineInput
+          onSubmit={onSubmit}
+          onCancel={onCancel}
+          placeholder="Descreva a macro-task para decompor em DAG..."
+        />
+      </Box>
 
-        <Box marginTop={1} gap={2}>
-          <Text dimColor>[Enter] iniciar pipeline</Text>
-          <Text dimColor>[o] opcoes</Text>
-        </Box>
+      <Box marginTop={1} gap={2}>
+        <Text dimColor>[o] opcoes</Text>
       </Box>
     </Box>
   );
@@ -89,14 +72,6 @@ interface ConfigSummaryProps {
  *
  * @param props.config - Configuracao validada
  * @param props.contextFileCount - Quantidade de arquivos no contexto
- *
- * @example
- * ```tsx
- * <ConfigSummary
- *   config={{ openrouterApiKey: 'sk-...', plannerModel: 'openai/gpt-4.1', workerModel: 'openai/gpt-4.1-mini', worktreeBasePath: '.wt' }}
- *   contextFileCount={3}
- * />
- * ```
  */
 const ConfigSummary = ({ config, contextFileCount }: ConfigSummaryProps) => (
   <Box

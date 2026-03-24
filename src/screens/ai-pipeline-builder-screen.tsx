@@ -2,7 +2,7 @@
  * Tela de criação de pipeline via IA.
  * O usuário descreve o que deseja em linguagem natural;
  * duas chamadas LLM geram o perfil completo automaticamente.
- * Escolhas do usuário: scope (local/global) e seats (paralelismo).
+ * Usa catálogo completo de modelos da OpenRouter para seleção.
  *
  * @module
  */
@@ -12,19 +12,21 @@ import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import SelectInput from 'ink-select-input';
 import { MultiLineInput } from '../components/multi-line-input.js';
+import { ModelSelector } from '../components/model-selector.js';
 import {
   generatePipeline,
   DEFAULT_BUILDER_MODEL,
   type GeneratorErrorKind,
 } from '../services/ai-pipeline-generator.js';
 import type { WorkerProfile, ProfileScope } from '../schemas/worker-profile.schema.js';
+import type { ModelEntry } from '../data/models.js';
 
 // ── Types ────────────────────────────────────────────────────────
 
 type Phase = 'description' | 'scope' | 'seats' | 'model' | 'generating' | 'preview' | 'error';
 
 interface AiPipelineBuilderScreenProps {
-  /** API key para chamadas LLM */
+  /** API key para chamadas LLM e carregar catálogo de modelos */
   readonly apiKey: string;
   /** Callback ao salvar perfil gerado */
   readonly onSave: (profile: WorkerProfile) => void;
@@ -44,17 +46,6 @@ const SEAT_OPTIONS = [
 const SCOPE_OPTIONS = [
   { label: 'Projeto (local — .pi-dag/)', value: 'project' as ProfileScope },
   { label: 'Global (todos os projetos — ~/.pi-dag-cli/)', value: 'global' as ProfileScope },
-];
-
-const MODEL_OPTIONS = [
-  { label: 'DeepSeek Chat (default)', value: 'deepseek/deepseek-chat' },
-  { label: 'DeepSeek V3', value: 'deepseek/deepseek-chat-v3-0324' },
-  { label: 'GPT-4.1 Mini', value: 'openai/gpt-4.1-mini' },
-  { label: 'GPT-4.1', value: 'openai/gpt-4.1' },
-  { label: 'Claude Sonnet 4.6', value: 'anthropic/claude-sonnet-4-6' },
-  { label: 'Claude Haiku 4.5', value: 'anthropic/claude-haiku-4-5-20251001' },
-  { label: 'Gemini 2.5 Flash', value: 'google/gemini-2.5-flash-preview' },
-  { label: 'Qwen3 235B', value: 'qwen/qwen3-235b-a22b' },
 ];
 
 const STEP_ICONS: Record<string, string> = {
@@ -79,7 +70,7 @@ const truncate = (s: string, max: number): string =>
 
 /**
  * Tela de criação de pipeline via IA.
- * Fluxo: descrição → scope → seats → modelo → geração → preview.
+ * Fluxo: descrição → scope → seats → modelo (catálogo OpenRouter completo) → geração → preview.
  *
  * @example
  * <AiPipelineBuilderScreen
@@ -98,12 +89,12 @@ export const AiPipelineBuilderScreen = ({
   const [generatedProfile, setGeneratedProfile] = useState<WorkerProfile | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // ESC handling para fases que não têm input próprio (scope, seats, model).
+  // ESC handling para fases que não têm input próprio (scope, seats).
   // description: MultiLineInput cuida do ESC internamente.
+  // model: ModelSelector cuida do ESC via pai.
   // generating: sem cancelamento. preview/error: handlers próprios.
   useInput((_input, key) => {
-    if (key.escape && phase !== 'generating' && phase !== 'description'
-        && phase !== 'preview' && phase !== 'error') {
+    if (key.escape && (phase === 'scope' || phase === 'seats')) {
       onCancel();
     }
   });
@@ -149,11 +140,20 @@ export const AiPipelineBuilderScreen = ({
 
   if (phase === 'model') {
     return (
-      <SelectPhase title="Modelo LLM para gerar a pipeline:" description={description}
-        subtitle="O modelo interpreta sua descrição e gera os steps."
-        items={MODEL_OPTIONS}
-        onSelect={(item) => { setModel(item.value); void startGeneration(item.value); }}
-      />
+      <Box flexDirection="column" padding={1}>
+        <Header description={description} />
+        <Box marginTop={1} flexDirection="column" paddingX={1}>
+          <Text bold color="yellow">Modelo LLM para gerar a pipeline:</Text>
+          <Text dimColor>O modelo interpreta sua descrição e gera os steps. Default: {DEFAULT_BUILDER_MODEL}</Text>
+        </Box>
+        <Box marginTop={1}>
+          <ModelSelector
+            apiKey={apiKey}
+            onSelect={(m: ModelEntry) => { setModel(m.id); void startGeneration(m.id); }}
+            title="Selecionar modelo para AI Builder"
+          />
+        </Box>
+      </Box>
     );
   }
 

@@ -2,16 +2,20 @@
  * Input multi-linha para Ink.
  * Captura keystrokes via useInput, renderiza texto com quebras de linha,
  * e submete apenas quando Enter é pressionado duas vezes seguidas.
+ * Suporta paste de conteúdo extenso com wrap automático.
  * Durante a edição, apenas ESC funciona como hotkey externa.
  *
  * @module
  */
 
 import React, { useState, useRef } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useStdout } from 'ink';
 
 /** Mínimo de caracteres para permitir submit */
 const MIN_LENGTH = 5;
+
+/** Margem para bordas, padding e line numbers */
+const BORDER_OVERHEAD = 8;
 
 interface MultiLineInputProps {
   /** Callback ao submeter (double Enter) */
@@ -32,6 +36,44 @@ const isControlKey = (key: {
 }): boolean =>
   key.ctrl || key.meta || key.upArrow || key.downArrow || key.leftArrow
   || key.rightArrow || key.pageUp || key.pageDown || key.home || key.end || key.tab;
+
+/**
+ * Quebra linhas longas respeitando a largura máxima disponível.
+ * Cada linha lógica do input pode gerar múltiplas linhas visuais.
+ *
+ * @param text - Texto completo do input
+ * @param maxWidth - Largura máxima em caracteres para o conteúdo
+ * @returns Array de { lineNum, text, isWrap } para renderização
+ */
+function wrapLines(
+  text: string,
+  maxWidth: number,
+): readonly { lineNum: number; text: string; isWrap: boolean }[] {
+  const logicalLines = text.split('\n');
+  const result: { lineNum: number; text: string; isWrap: boolean }[] = [];
+
+  for (let i = 0; i < logicalLines.length; i++) {
+    const line = logicalLines[i]!;
+    if (line.length <= maxWidth) {
+      result.push({ lineNum: i + 1, text: line, isWrap: false });
+    } else {
+      // Quebra em pedaços de maxWidth
+      let offset = 0;
+      let isFirst = true;
+      while (offset < line.length) {
+        result.push({
+          lineNum: i + 1,
+          text: line.slice(offset, offset + maxWidth),
+          isWrap: !isFirst,
+        });
+        offset += maxWidth;
+        isFirst = false;
+      }
+    }
+  }
+
+  return result;
+}
 
 /** Processa Enter: double-Enter submete, single-Enter adiciona newline */
 function processEnter(
@@ -93,7 +135,8 @@ function useMultiLineInput(
 /**
  * Input multi-linha controlado internamente.
  * Enter adiciona nova linha; Enter + Enter (consecutivos) submete.
- * Suporta paste de conteúdo multi-linha.
+ * Suporta paste de conteúdo multi-linha com wrap automático
+ * que respeita as bordas do componente.
  *
  * @example
  * <MultiLineInput
@@ -106,20 +149,32 @@ export function MultiLineInput({
   onSubmit, onCancel, placeholder = '', isActive = true,
 }: MultiLineInputProps) {
   const { value, showSubmitHint } = useMultiLineInput(onSubmit, onCancel, isActive);
-  const lines = value.split('\n');
+  const { stdout } = useStdout();
+  const termWidth = stdout?.columns ?? 80;
+  const contentWidth = Math.max(20, termWidth - BORDER_OVERHEAD);
   const isEmpty = value.length === 0;
+  const wrapped = isEmpty ? [] : wrapLines(value, contentWidth);
 
   return (
     <Box flexDirection="column">
-      <Box flexDirection="column" borderStyle="round" borderColor={isEmpty ? 'gray' : 'cyan'} paddingX={1} minHeight={3}>
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor={isEmpty ? 'gray' : 'cyan'}
+        paddingX={1}
+        minHeight={3}
+        width={termWidth - 2}
+      >
         {isEmpty ? (
           <Text dimColor>{placeholder}</Text>
         ) : (
-          lines.map((line, i) => (
+          wrapped.map((entry, i) => (
             <Text key={i}>
-              <Text dimColor>{String(i + 1).padStart(2)} </Text>
-              <Text>{line}</Text>
-              {i === lines.length - 1 && <Text color="cyan">{'\u2588'}</Text>}
+              <Text dimColor>
+                {entry.isWrap ? '   ' : String(entry.lineNum).padStart(2) + ' '}
+              </Text>
+              <Text>{entry.text}</Text>
+              {i === wrapped.length - 1 && <Text color="cyan">{'\u2588'}</Text>}
             </Text>
           ))
         )}

@@ -1,8 +1,8 @@
 /**
  * Tela de opcoes acessivel via [o] de qualquer tela.
- * Centraliza: selecao individual de modelos (planner/worker),
- * criacao de pipeline profiles, e guia de referencia.
- * Usa ModelSelector (DRY) para selecao de modelos.
+ * Menu principal com sub-menus: API Keys, Modelos, Pipelines, Guia.
+ * Modelos ficam travados se OpenRouter API key nao estiver configurada.
+ * Benchmarks AA so aparecem se AA key estiver presente.
  *
  * @module
  */
@@ -27,6 +27,9 @@ import { saveProfile } from '../services/profile-catalog.js';
 
 type OptionsPhase =
   | 'menu'
+  | 'keys-menu'
+  | 'models-menu'
+  | 'pipelines-menu'
   | 'planner-model'
   | 'worker-model'
   | 'create-profile'
@@ -53,8 +56,12 @@ const modelSummary = (id: string): string => {
   return `${m.name} (${formatPrice(m.inputPrice)}/${formatPrice(m.outputPrice)})`;
 };
 
+/** Verifica se a OpenRouter key parece preenchida (nao valida online) */
+const hasValidOrKey = (config: Config): boolean =>
+  Boolean(config.openrouterApiKey?.trim());
+
 /**
- * Tela de opcoes: selecao individual de modelos, criacao de pipelines e guia.
+ * Tela de opcoes com sub-menus: API Keys, Modelos, Pipelines, Guia.
  *
  * @example
  * <OptionsScreen
@@ -75,12 +82,13 @@ export const OptionsScreen = ({
   const [editingOrKey, setEditingOrKey] = useState(config.openrouterApiKey);
   const [editingAaKey, setEditingAaKey] = useState(config.artificialAnalysisApiKey ?? '');
   const { state: modelsState } = useModels(config.openrouterApiKey);
+  const hasAaKey = Boolean(config.artificialAnalysisApiKey);
   const { state: aaState } = useArtificialAnalysis(config.artificialAnalysisApiKey);
 
-  // ESC volta ao menu de qualquer sub-fase (incluindo edicao de keys)
+  // ESC volta ao parent de qualquer sub-fase de edicao de keys
   useInput((_input, key) => {
-    if (key.escape && phase !== 'menu') {
-      setPhase('menu');
+    if (key.escape && (phase === 'edit-openrouter-key' || phase === 'edit-aa-key')) {
+      setPhase('keys-menu');
     }
   }, { isActive: phase === 'edit-openrouter-key' || phase === 'edit-aa-key' });
 
@@ -88,7 +96,8 @@ export const OptionsScreen = ({
     modelsState.status === 'loaded' ? modelsState.models : [],
     aaState.status === 'loaded' ? aaState.models : [],
   );
-  const hasAAData = aaState.status === 'loaded';
+  const hasAAData = hasAaKey && aaState.status === 'loaded';
+  const orKeyValid = hasValidOrKey(config);
 
   const handlePlannerSelect = useCallback((model: EnrichedModel) => {
     const updated: Config = {
@@ -98,7 +107,7 @@ export const OptionsScreen = ({
     };
     onConfigChange(updated);
     setSaveMessage(`Planner atualizado: ${model.name}`);
-    setPhase('menu');
+    setPhase('models-menu');
   }, [config, onConfigChange]);
 
   const handleWorkerSelect = useCallback((model: EnrichedModel) => {
@@ -109,14 +118,14 @@ export const OptionsScreen = ({
     };
     onConfigChange(updated);
     setSaveMessage(`Worker atualizado: ${model.name}`);
-    setPhase('menu');
+    setPhase('models-menu');
   }, [config, onConfigChange]);
 
   const handleProfileSave = useCallback(async (profile: WorkerProfile) => {
     const errors = validateProfileReferences(profile);
     if (errors.length > 0) {
       setSaveMessage(`Erro: ${errors.join(' | ')}`);
-      setPhase('menu');
+      setPhase('pipelines-menu');
       return;
     }
 
@@ -126,19 +135,19 @@ export const OptionsScreen = ({
     } else {
       setSaveMessage(`Erro ao salvar: ${result.error.kind}`);
     }
-    setPhase('menu');
+    setPhase('pipelines-menu');
   }, [projectRoot]);
 
   const handleOrKeySave = useCallback((value: string) => {
     if (!value.trim()) {
       setSaveMessage('OpenRouter API key nao pode ser vazia');
-      setPhase('menu');
+      setPhase('keys-menu');
       return;
     }
     const updated: Config = { ...config, openrouterApiKey: value };
     onConfigChange(updated);
     setSaveMessage('OpenRouter API key atualizada');
-    setPhase('menu');
+    setPhase('keys-menu');
   }, [config, onConfigChange]);
 
   const handleAaKeySave = useCallback((value: string) => {
@@ -148,7 +157,7 @@ export const OptionsScreen = ({
     };
     onConfigChange(updated);
     setSaveMessage(value.trim() ? 'Artificial Analysis API key atualizada' : 'Artificial Analysis API key removida');
-    setPhase('menu');
+    setPhase('keys-menu');
   }, [config, onConfigChange]);
 
   // --- Loading models ---
@@ -178,7 +187,7 @@ export const OptionsScreen = ({
       <EnhancedModelTable
         models={enrichedModels}
         onSelect={handlePlannerSelect}
-        onCancel={() => setPhase('menu')}
+        onCancel={() => setPhase('models-menu')}
         title={`Selecionar Modelo Planner (${enrichedModels.length} modelos${hasAAData ? ' + benchmarks AA' : ''})`}
         hasAAData={hasAAData}
       />
@@ -191,7 +200,7 @@ export const OptionsScreen = ({
       <EnhancedModelTable
         models={enrichedModels}
         onSelect={handleWorkerSelect}
-        onCancel={() => setPhase('menu')}
+        onCancel={() => setPhase('models-menu')}
         title={`Selecionar Modelo Worker (${enrichedModels.length} modelos${hasAAData ? ' + benchmarks AA' : ''})`}
         hasAAData={hasAAData}
       />
@@ -204,7 +213,7 @@ export const OptionsScreen = ({
       <Box flexDirection="column" padding={1}>
         <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
           <Text bold color="cyan">OpenRouter API Key</Text>
-          <Text dimColor>Altere sua chave de API do OpenRouter.</Text>
+          <Text dimColor>Chave obrigatoria para acessar modelos LLM via OpenRouter.</Text>
           <Box marginTop={1}>
             <Text>API Key: </Text>
             <TextInput
@@ -257,7 +266,7 @@ export const OptionsScreen = ({
     return (
       <ProfileBuilderScreen
         onSave={(profile) => void handleProfileSave(profile)}
-        onCancel={() => setPhase('menu')}
+        onCancel={() => setPhase('pipelines-menu')}
       />
     );
   }
@@ -268,7 +277,7 @@ export const OptionsScreen = ({
       <AiPipelineBuilderScreen
         apiKey={config.openrouterApiKey}
         onSave={(profile) => void handleProfileSave(profile)}
-        onCancel={() => setPhase('menu')}
+        onCancel={() => setPhase('pipelines-menu')}
       />
     );
   }
@@ -278,81 +287,107 @@ export const OptionsScreen = ({
     return <GuideScreen onBack={() => setPhase('menu')} />;
   }
 
+  // --- API Keys sub-menu ---
+  if (phase === 'keys-menu') {
+    return (
+      <SubMenu
+        title="API Keys"
+        description="Configure as chaves de acesso aos servicos."
+        saveMessage={saveMessage}
+        onBack={() => { setSaveMessage(null); setPhase('menu'); }}
+        items={[
+          {
+            label: `OpenRouter API Key   ${orKeyValid ? '(configurada)' : '(nao configurada)'}`,
+            value: 'edit-or-key',
+          },
+          {
+            label: `Artificial Analysis Key   ${hasAaKey ? '(configurada)' : '(nao configurada — sem benchmarks)'}`,
+            value: 'edit-aa-key',
+          },
+          { label: 'Voltar', value: 'back' },
+        ]}
+        onSelect={(value) => {
+          setSaveMessage(null);
+          if (value === 'edit-or-key') { setEditingOrKey(config.openrouterApiKey); setPhase('edit-openrouter-key'); }
+          else if (value === 'edit-aa-key') { setEditingAaKey(config.artificialAnalysisApiKey ?? ''); setPhase('edit-aa-key'); }
+          else { setPhase('menu'); }
+        }}
+      />
+    );
+  }
+
+  // --- Models sub-menu ---
+  if (phase === 'models-menu') {
+    const lockedMsg = !orKeyValid ? ' (configure a OpenRouter API Key primeiro)' : '';
+    return (
+      <SubMenu
+        title="Selecao de Modelos"
+        description={orKeyValid
+          ? 'Escolha modelos para o Planner (raciocinio) e Worker (execucao).'
+          : 'Configure a OpenRouter API Key em API Keys para desbloquear a selecao.'}
+        saveMessage={saveMessage}
+        onBack={() => { setSaveMessage(null); setPhase('menu'); }}
+        items={[
+          {
+            label: `Modelo Planner   ${modelSummary(config.selectedAgents.planner)}${lockedMsg}`,
+            value: 'planner',
+          },
+          {
+            label: `Modelo Worker    ${modelSummary(config.selectedAgents.worker)}${lockedMsg}`,
+            value: 'worker',
+          },
+          { label: 'Voltar', value: 'back' },
+        ]}
+        onSelect={(value) => {
+          setSaveMessage(null);
+          if (!orKeyValid && (value === 'planner' || value === 'worker')) {
+            setSaveMessage('Configure a OpenRouter API Key primeiro em API Keys');
+            return;
+          }
+          if (value === 'planner') setPhase('planner-model');
+          else if (value === 'worker') setPhase('worker-model');
+          else setPhase('menu');
+        }}
+      />
+    );
+  }
+
+  // --- Pipelines sub-menu ---
+  if (phase === 'pipelines-menu') {
+    return (
+      <SubMenu
+        title="Pipeline Profiles"
+        description="Crie pipelines multi-step para customizar a execucao dos workers."
+        saveMessage={saveMessage}
+        onBack={() => { setSaveMessage(null); setPhase('menu'); }}
+        items={[
+          { label: 'Criar Pipeline com IA (AI Builder)', value: 'ai-builder' },
+          { label: 'Criar Pipeline Manual (Wizard)', value: 'create-profile' },
+          { label: 'Voltar', value: 'back' },
+        ]}
+        onSelect={(value) => {
+          setSaveMessage(null);
+          if (value === 'ai-builder') setPhase('ai-builder');
+          else if (value === 'create-profile') setPhase('create-profile');
+          else setPhase('menu');
+        }}
+      />
+    );
+  }
+
   // --- Main menu ---
-  const aaStatus = config.artificialAnalysisApiKey ? 'configurada' : 'nao configurada';
   const menuItems = [
-    {
-      label: `\u{1F511}  OpenRouter API Key`,
-      value: 'edit-or-key',
-    },
-    {
-      label: `\u{1F4CA}  Artificial Analysis Key   (${aaStatus})`,
-      value: 'edit-aa-key',
-    },
-    {
-      label: `\u{1F9E0}  Modelo Planner   ${modelSummary(config.selectedAgents.planner)}`,
-      value: 'planner',
-    },
-    {
-      label: `\u{2699}\u{FE0F}   Modelo Worker    ${modelSummary(config.selectedAgents.worker)}`,
-      value: 'worker',
-    },
-    {
-      label: '\u{1F9E0}  Criar Pipeline com IA (AI Builder)',
-      value: 'ai-builder',
-    },
-    {
-      label: '\u{1F527}  Criar Pipeline Manual',
-      value: 'create-profile',
-    },
-    {
-      label: '\u{1F4D6}  Guia de Referencia',
-      value: 'guide',
-    },
-    {
-      label: '\u{2190}   Voltar',
-      value: 'back',
-    },
+    { label: 'API Keys', value: 'keys' },
+    { label: 'Modelos', value: 'models' },
+    { label: 'Pipeline Profiles', value: 'pipelines' },
+    { label: 'Guia de Referencia', value: 'guide' },
+    { label: 'Voltar', value: 'back' },
   ];
 
   return (
     <Box flexDirection="column" padding={1}>
       <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
-        <Text bold color="cyan">{'\u2699\uFE0F'}  Opcoes</Text>
-        <Text dimColor>Configure modelos, crie pipelines e consulte o guia de referencia.</Text>
-      </Box>
-
-      {/* Descricoes das opcoes */}
-      <Box marginTop={1} flexDirection="column" paddingX={1}>
-        <Box flexDirection="column" marginBottom={1}>
-          <Text bold color="yellow">{'\u{1F511}'} API Keys</Text>
-          <Text dimColor>  Configure as chaves de API: OpenRouter (obrigatoria) e</Text>
-          <Text dimColor>  Artificial Analysis (opcional — habilita benchmarks na tabela).</Text>
-        </Box>
-        <Box flexDirection="column" marginBottom={1}>
-          <Text bold color="yellow">{'\u{1F9E0}'} Modelo Planner</Text>
-          <Text dimColor>  O Planner e o modelo de raciocinio pesado que decompoe sua macro-task</Text>
-          <Text dimColor>  em um DAG de subtasks. Modelos maiores geram DAGs mais precisos.</Text>
-        </Box>
-        <Box flexDirection="column" marginBottom={1}>
-          <Text bold color="yellow">{'\u2699\uFE0F'}  Modelo Worker</Text>
-          <Text dimColor>  Os Workers executam cada subtask em worktrees Git isoladas.</Text>
-          <Text dimColor>  Modelos rapidos funcionam bem para tarefas simples.</Text>
-        </Box>
-        <Box flexDirection="column" marginBottom={1}>
-          <Text bold color="yellow">{'\u{1F9E0}'} AI Pipeline Builder</Text>
-          <Text dimColor>  Descreva o que deseja e a IA gera a pipeline automaticamente.</Text>
-          <Text dimColor>  Escolha qualquer modelo da OpenRouter para gerar a pipeline.</Text>
-        </Box>
-        <Box flexDirection="column" marginBottom={1}>
-          <Text bold color="yellow">{'\u{1F527}'} Pipeline Manual</Text>
-          <Text dimColor>  Wizard visual para montar pipelines step-by-step manualmente.</Text>
-          <Text dimColor>  Controle total sobre cada step, condicoes e variaveis.</Text>
-        </Box>
-        <Box flexDirection="column" marginBottom={1}>
-          <Text bold color="yellow">{'\u{1F4D6}'} Guia de Referencia</Text>
-          <Text dimColor>  Documentacao completa sobre step types, variaveis e exemplos.</Text>
-        </Box>
+        <Text bold color="cyan">Opcoes</Text>
       </Box>
 
       {saveMessage && (
@@ -367,12 +402,9 @@ export const OptionsScreen = ({
           onSelect={(item) => {
             setSaveMessage(null);
             switch (item.value) {
-              case 'edit-or-key': setEditingOrKey(config.openrouterApiKey); setPhase('edit-openrouter-key'); break;
-              case 'edit-aa-key': setEditingAaKey(config.artificialAnalysisApiKey ?? ''); setPhase('edit-aa-key'); break;
-              case 'planner': setPhase('planner-model'); break;
-              case 'worker': setPhase('worker-model'); break;
-              case 'ai-builder': setPhase('ai-builder'); break;
-              case 'create-profile': setPhase('create-profile'); break;
+              case 'keys': setPhase('keys-menu'); break;
+              case 'models': setPhase('models-menu'); break;
+              case 'pipelines': setPhase('pipelines-menu'); break;
               case 'guide': setPhase('guide'); break;
               case 'back': onBack(); break;
             }
@@ -381,11 +413,55 @@ export const OptionsScreen = ({
       </Box>
 
       <Box paddingX={1}>
-        <Text dimColor>[ESC] voltar  |  Mudancas de modelo sao salvas imediatamente</Text>
+        <Text dimColor>[ESC] voltar</Text>
       </Box>
     </Box>
   );
 };
+
+// ── SubMenu component (DRY) ──────────────────────────────────────────
+
+interface SubMenuProps {
+  readonly title: string;
+  readonly description: string;
+  readonly saveMessage: string | null;
+  readonly onBack: () => void;
+  readonly items: readonly { readonly label: string; readonly value: string }[];
+  readonly onSelect: (value: string) => void;
+}
+
+/** Sub-menu reutilizavel com titulo, descricao e itens selecionaveis. */
+function SubMenu({ title, description, saveMessage, onBack, items, onSelect }: SubMenuProps) {
+  useInput((_input, key) => {
+    if (key.escape) onBack();
+  });
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
+        <Text bold color="cyan">{title}</Text>
+        <Text dimColor>{description}</Text>
+      </Box>
+
+      {saveMessage && (
+        <Box marginTop={1} paddingX={1}>
+          <Text color={saveMessage.startsWith('Erro') ? 'red' : 'green'}>{saveMessage}</Text>
+        </Box>
+      )}
+
+      <Box marginTop={1}>
+        <SelectInput
+          items={items as { label: string; value: string }[]}
+          onSelect={(item) => onSelect(item.value)}
+        />
+      </Box>
+
+      <Box paddingX={1}>
+        <Text dimColor>[ESC] voltar</Text>
+      </Box>
+    </Box>
+  );
+}
 
 // ── Guide Screen ──────────────────────────────────────────────────────
 
@@ -413,8 +489,7 @@ function GuideScreen({ onBack }: GuideScreenProps) {
   return (
     <Box flexDirection="column" padding={1}>
       <Box borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1} flexDirection="column">
-        <Text bold color="cyan">{'\u{1F4D6}'} Guia de Referencia — Worker Pipeline Profiles</Text>
-        <Text dimColor>Consulte tudo sobre pipelines, steps, variaveis e exemplos.</Text>
+        <Text bold color="cyan">Guia de Referencia — Worker Pipeline Profiles</Text>
       </Box>
 
       {/* Tabs */}
@@ -456,7 +531,7 @@ function GuideOverview() {
       <Text dimColor>  a pipeline roda DENTRO de cada worker, no seu worktree isolado.</Text>
       <Text> </Text>
       <Text bold color="yellow">Fluxo de uso:</Text>
-      <Text dimColor>  1. Crie um perfil em [o] Opcoes {'\u2192'} Criar Pipeline Profile</Text>
+      <Text dimColor>  1. Crie um perfil em [o] Opcoes {'\u2192'} Pipeline Profiles</Text>
       <Text dimColor>  2. Defina os steps (IA, condicoes, variaveis, etc.)</Text>
       <Text dimColor>  3. Salve como "project" (local) ou "global" (todos os projetos)</Text>
       <Text dimColor>  4. Na proxima execucao, selecione o perfil na tela de selecao</Text>
@@ -487,29 +562,29 @@ function GuideSteps() {
     <Box flexDirection="column">
       <Text bold color="yellow">7 Step Types disponiveis (V1)</Text>
       <Text> </Text>
-      <Text bold color="green">{'\u{1F916}'} pi_agent — Executa IA no worktree</Text>
+      <Text bold color="green">pi_agent — Executa IA no worktree</Text>
       <Text dimColor>  Roda o Pi Coding Agent com o taskTemplate resolvido.</Text>
       <Text dimColor>  O agente pode criar/editar arquivos e rodar comandos.</Text>
       <Text color="red" dimColor>  NAO pode definir variaveis — use langchain_prompt para analise.</Text>
       <Text> </Text>
-      <Text bold color="magenta">{'\u{1F4AC}'} langchain_prompt — Gera texto via LLM</Text>
+      <Text bold color="magenta">langchain_prompt — Gera texto via LLM</Text>
       <Text dimColor>  Envia prompt ao LLM e salva a resposta em uma variavel.</Text>
       <Text dimColor>  Use para: analise, planejamento, decisoes, revisao de codigo.</Text>
       <Text> </Text>
-      <Text bold color="yellow">{'\u{1F500}'} condition — Bifurca execucao</Text>
+      <Text bold color="yellow">condition — Bifurca execucao</Text>
       <Text dimColor>  Avalia: $variavel operador valor (ex: $custom_tries {'>'}= 3)</Text>
       <Text dimColor>  A variavel deve ter sido definida por um step anterior.</Text>
       <Text> </Text>
-      <Text bold color="cyan">{'\u27A1\uFE0F'}  goto — Salto incondicional</Text>
+      <Text bold color="cyan">goto — Salto incondicional</Text>
       <Text dimColor>  Move o cursor para outro step ou __end__.</Text>
       <Text> </Text>
-      <Text bold color="blue">{'\u{1F4DD}'} set_variable — Define variavel</Text>
+      <Text bold color="blue">set_variable — Define variavel</Text>
       <Text dimColor>  Valor literal ou expressao aritmetica.</Text>
       <Text> </Text>
-      <Text bold color="white">{'\u{1F4CB}'} git_diff — Captura diff do worktree</Text>
+      <Text bold color="white">git_diff — Captura diff do worktree</Text>
       <Text dimColor>  Executa git diff e armazena em variavel.</Text>
       <Text> </Text>
-      <Text bold color="red">{'\u{1F6D1}'} fail — Encerra com erro</Text>
+      <Text bold color="red">fail — Encerra com erro</Text>
       <Text dimColor>  Encerra a pipeline com mensagem de erro de negocio.</Text>
     </Box>
   );

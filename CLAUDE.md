@@ -40,7 +40,7 @@ src/
 │   ├── config-screen.tsx            # API keys (OpenRouter + AA) + seleção de modelos
 │   ├── context-screen.tsx           # Seleção de arquivos/dirs
 │   ├── task-screen.tsx              # Input da macro-task
-│   ├── options-screen.tsx           # [o] Opcoes: API keys + modelos individuais + criar pipelines
+│   ├── options-screen.tsx           # [o] Opcoes: sub-menus (API Keys, Modelos, Pipelines, Guia)
 │   ├── profile-select-screen.tsx    # Seleção de perfil antes da execução
 │   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis (via opcoes)
 │   ├── ai-pipeline-builder-screen.tsx # Criação de pipeline via IA (LangChain)
@@ -96,7 +96,7 @@ Perfis definem pipelines multi-step dentro de cada worker. O DAG permanece como 
 
 **Schema do perfil:** `id` em kebab-case como label principal, `seats` (1-16) para limitar concorrência por perfil e `initialVariables` para seed de variáveis `custom_*`.
 
-**Atalho [o] opcoes:** acessível de qualquer tela (exceto config/loading/executing). Permite editar API keys (OpenRouter e Artificial Analysis), trocar modelo planner ou worker individualmente (catálogo completo de modelos com benchmarks e ESC para cancelar), criar pipeline profiles manualmente ou via IA. Legenda `[o] opcoes` aparece no rodapé de cada tela.
+**Atalho [o] opcoes:** acessível de qualquer tela (exceto config/loading/executing). Menu principal com sub-menus: API Keys (OpenRouter + AA), Modelos (Planner/Worker — travados se OpenRouter key ausente), Pipeline Profiles (AI Builder + Manual Wizard), Guia de Referencia. Sem AA key, benchmarks nao aparecem na tabela de modelos. Legenda `[o] opcoes` aparece no rodapé de cada tela.
 
 ## Artificial Analysis Integration
 
@@ -106,7 +106,7 @@ Integração opcional com a API da Artificial Analysis para enriquecer a tabela 
 
 **Dados enriquecidos:** Intelligence Index (0-100), Coding Index, Math Index, MMLU-Pro, GPQA, HLE, LiveCodeBench, SciCode, MATH-500, AIME, tokens/s, TTFT, custo-benefício (I/$).
 
-**Enhanced Model Table:** Tabela avançada com scroll horizontal (h/l), ordenação multi-critério (s/S), filtros preset (f: todos, com benchmarks, high intel, best value, fast), e matching automático entre modelos OpenRouter e AA por nome normalizado.
+**Enhanced Model Table:** Tabela avançada com scroll horizontal (h/l), ordenação multi-critério (s/S), filtros preset (p: todos, com benchmarks, high intel, best value, fast), filtro de texto (f para ativar digitação, ESC/Enter para sair e liberar navegação), e matching automático entre modelos OpenRouter e AA por nome normalizado.
 
 **Cache:** 24h para benchmarks, matching por slug/nome normalizado. Client em `src/data/artificial-analysis-client.ts`, tipo enriquecido em `src/data/enriched-model.ts`.
 

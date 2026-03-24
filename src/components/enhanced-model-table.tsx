@@ -1,9 +1,13 @@
 /**
  * Tabela avancada de modelos LLM com:
- * - Scroll horizontal (h/l ou setas) para ver todas as colunas
+ * - Filtros compostos pipe-separated ($metric>=val|texto) com semantica OR
+ * - Scroll horizontal (setas esquerda/direita) e vertical (setas cima/baixo)
+ * - Shift+setas para page up/down
  * - Ordenacao por qualquer coluna (s para ciclar, S para inverter)
- * - Filtros por texto, benchmark minimo, custo-beneficio
+ * - Filtros preset (p) e texto livre (f)
+ * - Construtor visual de filtros (F)
  * - Dados de benchmark da Artificial Analysis quando disponiveis
+ * - Header e footer sempre visiveis, tabela com altura dinamica
  *
  * @module
  */
@@ -12,220 +16,21 @@ import { useState, useMemo } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
 import TextInput from 'ink-text-input';
 import type { EnrichedModel } from '../data/enriched-model.js';
-import { formatPrice, formatContext } from '../data/models.js';
+import {
+  COLUMNS, pad, padR,
+  SORT_CYCLE, FILTER_LABELS, FILTER_CYCLE,
+  type SortKey, type FilterMode,
+} from './model-table-columns.js';
+import {
+  parseFilterRules, serializeFilterRules,
+  applyFilterRules, applyPresetFilter,
+} from './model-table-filter.js';
+import { FilterBuilderModal } from './filter-builder-modal.js';
 
-// ── Column definitions ──────────────────────────────────────────────
+// ── Layout constants ────────────────────────────────────────────────
 
-interface ColumnDef {
-  readonly key: string;
-  readonly label: string;
-  readonly width: number;
-  readonly align: 'left' | 'right';
-  readonly group: 'base' | 'benchmark' | 'speed';
-  /** Extrai valor numerico para sort (null = sem dados) */
-  readonly getValue: (m: EnrichedModel) => number | null;
-  /** Renderiza valor para display */
-  readonly format: (m: EnrichedModel) => string;
-  /** Cor do valor */
-  readonly color?: (m: EnrichedModel) => string | undefined;
-}
-
-const priceColor = (price: number): string | undefined =>
-  price <= 0.5 ? 'green' : price <= 5 ? 'yellow' : 'red';
-
-const benchColor = (val: number | null, thresholds: [number, number]): string | undefined => {
-  if (val === null) return undefined;
-  return val >= thresholds[1] ? 'green' : val >= thresholds[0] ? 'yellow' : 'red';
-};
-
-const speedColor = (tps: number | null): string | undefined => {
-  if (tps === null) return undefined;
-  return tps >= 100 ? 'green' : tps >= 50 ? 'yellow' : 'red';
-};
-
-const fmtBench = (val: number | null, scale: '100' | '1'): string => {
-  if (val === null) return '-';
-  return scale === '100' ? val.toFixed(1) : (val * 100).toFixed(1);
-};
-
-const fmtSpeed = (val: number | null): string =>
-  val === null ? '-' : val.toFixed(0);
-
-const fmtLatency = (val: number | null): string =>
-  val === null ? '-' : val.toFixed(2) + 's';
-
-const COLUMNS: readonly ColumnDef[] = [
-  // ── Base (always visible) ──
-  {
-    key: 'name', label: 'Nome', width: 26, align: 'left', group: 'base',
-    getValue: () => null,
-    format: (m) => m.name.slice(0, 25),
-  },
-  {
-    key: 'provider', label: 'Provider', width: 12, align: 'left', group: 'base',
-    getValue: () => null,
-    format: (m) => m.provider.slice(0, 11),
-  },
-  {
-    key: 'context', label: 'Ctx', width: 6, align: 'right', group: 'base',
-    getValue: (m) => m.contextWindow,
-    format: (m) => formatContext(m.contextWindow),
-    color: (m) => m.contextWindow >= 200 ? 'green' : m.contextWindow >= 100 ? 'yellow' : undefined,
-  },
-  {
-    key: 'inputPrice', label: '$In/M', width: 8, align: 'right', group: 'base',
-    getValue: (m) => m.inputPrice,
-    format: (m) => formatPrice(m.inputPrice),
-    color: (m) => priceColor(m.inputPrice),
-  },
-  {
-    key: 'outputPrice', label: '$Out/M', width: 8, align: 'right', group: 'base',
-    getValue: (m) => m.outputPrice,
-    format: (m) => formatPrice(m.outputPrice),
-    color: (m) => priceColor(m.outputPrice),
-  },
-  {
-    key: 'tools', label: 'Tools', width: 5, align: 'right', group: 'base',
-    getValue: (m) => m.hasTools ? 1 : 0,
-    format: (m) => m.hasTools ? 'Y' : '-',
-    color: (m) => m.hasTools ? 'green' : undefined,
-  },
-  {
-    key: 'reasoning', label: 'Reas', width: 5, align: 'right', group: 'base',
-    getValue: (m) => m.hasReasoning ? 1 : 0,
-    format: (m) => m.hasReasoning ? 'Y' : '-',
-    color: (m) => m.hasReasoning ? 'green' : undefined,
-  },
-  // ── Benchmarks (AA data) ──
-  {
-    key: 'intelligence', label: 'Intel', width: 6, align: 'right', group: 'benchmark',
-    getValue: (m) => m.aa.benchmarks.intelligenceIndex,
-    format: (m) => fmtBench(m.aa.benchmarks.intelligenceIndex, '100'),
-    color: (m) => benchColor(m.aa.benchmarks.intelligenceIndex, [30, 50]),
-  },
-  {
-    key: 'coding', label: 'Code', width: 6, align: 'right', group: 'benchmark',
-    getValue: (m) => m.aa.benchmarks.codingIndex,
-    format: (m) => fmtBench(m.aa.benchmarks.codingIndex, '100'),
-    color: (m) => benchColor(m.aa.benchmarks.codingIndex, [25, 45]),
-  },
-  {
-    key: 'math', label: 'Math', width: 6, align: 'right', group: 'benchmark',
-    getValue: (m) => m.aa.benchmarks.mathIndex,
-    format: (m) => fmtBench(m.aa.benchmarks.mathIndex, '100'),
-    color: (m) => benchColor(m.aa.benchmarks.mathIndex, [40, 70]),
-  },
-  {
-    key: 'mmluPro', label: 'MMLU', width: 6, align: 'right', group: 'benchmark',
-    getValue: (m) => m.aa.benchmarks.mmluPro,
-    format: (m) => fmtBench(m.aa.benchmarks.mmluPro, '1'),
-    color: (m) => benchColor(m.aa.benchmarks.mmluPro, [0.6, 0.75]),
-  },
-  {
-    key: 'gpqa', label: 'GPQA', width: 6, align: 'right', group: 'benchmark',
-    getValue: (m) => m.aa.benchmarks.gpqa,
-    format: (m) => fmtBench(m.aa.benchmarks.gpqa, '1'),
-    color: (m) => benchColor(m.aa.benchmarks.gpqa, [0.5, 0.7]),
-  },
-  {
-    key: 'hle', label: 'HLE', width: 6, align: 'right', group: 'benchmark',
-    getValue: (m) => m.aa.benchmarks.hle,
-    format: (m) => fmtBench(m.aa.benchmarks.hle, '1'),
-    color: (m) => benchColor(m.aa.benchmarks.hle, [0.05, 0.15]),
-  },
-  {
-    key: 'livecodebench', label: 'LCB', width: 6, align: 'right', group: 'benchmark',
-    getValue: (m) => m.aa.benchmarks.livecodebench,
-    format: (m) => fmtBench(m.aa.benchmarks.livecodebench, '1'),
-    color: (m) => benchColor(m.aa.benchmarks.livecodebench, [0.3, 0.6]),
-  },
-  {
-    key: 'scicode', label: 'Sci', width: 6, align: 'right', group: 'benchmark',
-    getValue: (m) => m.aa.benchmarks.scicode,
-    format: (m) => fmtBench(m.aa.benchmarks.scicode, '1'),
-    color: (m) => benchColor(m.aa.benchmarks.scicode, [0.15, 0.3]),
-  },
-  {
-    key: 'math500', label: 'M500', width: 6, align: 'right', group: 'benchmark',
-    getValue: (m) => m.aa.benchmarks.math500,
-    format: (m) => fmtBench(m.aa.benchmarks.math500, '1'),
-    color: (m) => benchColor(m.aa.benchmarks.math500, [0.7, 0.9]),
-  },
-  {
-    key: 'aime', label: 'AIME', width: 6, align: 'right', group: 'benchmark',
-    getValue: (m) => m.aa.benchmarks.aime,
-    format: (m) => fmtBench(m.aa.benchmarks.aime, '1'),
-    color: (m) => benchColor(m.aa.benchmarks.aime, [0.3, 0.6]),
-  },
-  // ── Speed (AA data) ──
-  {
-    key: 'tokensPerSec', label: 'Tok/s', width: 7, align: 'right', group: 'speed',
-    getValue: (m) => m.aa.speed.outputTokensPerSecond,
-    format: (m) => fmtSpeed(m.aa.speed.outputTokensPerSecond),
-    color: (m) => speedColor(m.aa.speed.outputTokensPerSecond),
-  },
-  {
-    key: 'ttft', label: 'TTFT', width: 7, align: 'right', group: 'speed',
-    getValue: (m) => m.aa.speed.timeToFirstToken,
-    format: (m) => fmtLatency(m.aa.speed.timeToFirstToken),
-  },
-  // ── Computed ──
-  {
-    key: 'costBenefit', label: 'I/$', width: 7, align: 'right', group: 'benchmark',
-    getValue: (m) => {
-      const intel = m.aa.benchmarks.intelligenceIndex;
-      const price = m.aa.pricing.blended3to1 ?? (m.inputPrice * 0.75 + m.outputPrice * 0.25);
-      if (intel === null || price <= 0) return null;
-      return intel / price;
-    },
-    format: (m) => {
-      const intel = m.aa.benchmarks.intelligenceIndex;
-      const price = m.aa.pricing.blended3to1 ?? (m.inputPrice * 0.75 + m.outputPrice * 0.25);
-      if (intel === null || price <= 0) return '-';
-      return (intel / price).toFixed(1);
-    },
-    color: (m) => {
-      const intel = m.aa.benchmarks.intelligenceIndex;
-      const price = m.aa.pricing.blended3to1 ?? (m.inputPrice * 0.75 + m.outputPrice * 0.25);
-      if (intel === null || price <= 0) return undefined;
-      const ratio = intel / price;
-      return ratio >= 50 ? 'green' : ratio >= 15 ? 'yellow' : 'red';
-    },
-  },
-];
-
-// ── Sort modes ──────────────────────────────────────────────────────
-
-type SortKey = typeof COLUMNS[number]['key'];
-
-const SORT_CYCLE: readonly SortKey[] = [
-  'inputPrice', 'intelligence', 'coding', 'math', 'costBenefit',
-  'tokensPerSec', 'mmluPro', 'gpqa', 'hle', 'livecodebench', 'context',
-];
-
-// ── Filter modes ────────────────────────────────────────────────────
-
-type FilterMode = 'none' | 'has-benchmarks' | 'high-intel' | 'best-value' | 'fast';
-
-const FILTER_LABELS: Record<FilterMode, string> = {
-  'none': 'Todos',
-  'has-benchmarks': 'Com benchmarks',
-  'high-intel': 'Intel >= 40',
-  'best-value': 'I/$ >= 20',
-  'fast': '> 80 tok/s',
-};
-
-const FILTER_CYCLE: readonly FilterMode[] = ['none', 'has-benchmarks', 'high-intel', 'best-value', 'fast'];
-
-// ── Helpers ─────────────────────────────────────────────────────────
-
-const pad = (str: string, len: number): string =>
-  str.length >= len ? str.slice(0, len) : str + ' '.repeat(len - str.length);
-
-const padR = (str: string, len: number): string =>
-  str.length >= len ? str.slice(0, len) : ' '.repeat(len - str.length) + str;
-
-const HEADER_LINES = 8;
+/** Header (border+title+filter bar) = ~5 lines, footer = 5 lines, table header = 2, padding = 2 */
+const CHROME_LINES = 14;
 
 // ── Props ───────────────────────────────────────────────────────────
 
@@ -240,16 +45,17 @@ interface EnhancedModelTableProps {
 
 /**
  * Tabela avancada de selecao de modelos com scroll horizontal,
- * ordenacao multi-criterio, filtros de benchmark e dados AA.
+ * ordenacao multi-criterio, filtros compostos pipe-separated e dados AA.
  *
  * Keybindings:
- * - j/k ou setas: navegar verticalmente
- * - h/l ou Shift+setas: scroll horizontal (colunas)
- * - s: ciclar ordenacao (preco, intel, code, math, custo-beneficio, velocidade)
- * - S (shift+s): inverter direcao da ordenacao
- * - f: ativar filtro de texto (ESC/Enter para sair)
- * - p: ciclar filtro preset (todos, com benchmarks, high intel, best value, fast)
- * - Enter: selecionar modelo
+ * - Setas cima/baixo: navegar verticalmente
+ * - Shift+setas cima/baixo: page up/down
+ * - Setas esquerda/direita: scroll horizontal (colunas)
+ * - s: ciclar ordenacao | S: inverter direcao
+ * - f: ativar filtro texto (pipe syntax: $Intel>=40|gpt)
+ * - F: abrir construtor visual de filtros
+ * - p: ciclar filtro preset
+ * - Enter: selecionar modelo | ESC: cancelar
  *
  * @example
  * ```tsx
@@ -263,8 +69,9 @@ export const EnhancedModelTable = ({
   hasAAData,
   onCancel,
 }: EnhancedModelTableProps) => {
-  const [filter, setFilter] = useState('');
+  const [filterText, setFilterText] = useState('');
   const [filterActive, setFilterActive] = useState(false);
+  const [showBuilder, setShowBuilder] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [colOffset, setColOffset] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>('inputPrice');
@@ -272,17 +79,18 @@ export const EnhancedModelTable = ({
   const [filterMode, setFilterMode] = useState<FilterMode>('none');
   const { stdout } = useStdout();
   const termCols = stdout?.columns ?? 120;
-  const maxRows = Math.max(3, (stdout?.rows ?? 24) - HEADER_LINES);
+  const termRows = stdout?.rows ?? 24;
+  const maxRows = Math.max(3, termRows - CHROME_LINES);
 
-  // Colunas visiveis: base sempre + benchmark/speed apenas com AA data
+  // Colunas disponiveis: base sempre + benchmark/speed apenas com AA data
   const availableCols = useMemo(() =>
     COLUMNS.filter((c) => c.group === 'base' || hasAAData),
   [hasAAData]);
 
-  // Calcular quantas colunas cabem na tela a partir do offset
+  // Colunas visiveis na tela a partir do offset horizontal
   const visibleCols = useMemo(() => {
     let totalWidth = 0;
-    const cols: ColumnDef[] = [];
+    const cols: typeof availableCols[number][] = [];
     for (let i = colOffset; i < availableCols.length; i++) {
       const col = availableCols[i]!;
       if (totalWidth + col.width + 1 > termCols - 4) break;
@@ -294,60 +102,25 @@ export const EnhancedModelTable = ({
 
   const maxColOffset = Math.max(0, availableCols.length - visibleCols.length);
 
-  // Filtrar por texto + preset
+  // Parse regras do filtro texto
+  const filterRules = useMemo(() => parseFilterRules(filterText), [filterText]);
+
+  // Pipeline: preset -> pipe filter rules -> sort
   const filtered = useMemo(() => {
-    let result = [...models];
+    const presetFiltered = applyPresetFilter([...models], filterMode);
+    return applyFilterRules(presetFiltered, filterRules, availableCols);
+  }, [models, filterMode, filterRules, availableCols]);
 
-    // Filtro de texto
-    if (filter.trim()) {
-      const q = filter.toLowerCase();
-      result = result.filter(
-        (m) =>
-          m.name.toLowerCase().includes(q) ||
-          m.provider.toLowerCase().includes(q) ||
-          m.id.toLowerCase().includes(q) ||
-          m.tokenizer.toLowerCase().includes(q) ||
-          (m.aa.creatorSlug?.toLowerCase().includes(q) ?? false),
-      );
-    }
-
-    // Filtro preset
-    switch (filterMode) {
-      case 'has-benchmarks':
-        result = result.filter((m) => m.aa.matched);
-        break;
-      case 'high-intel':
-        result = result.filter((m) => (m.aa.benchmarks.intelligenceIndex ?? 0) >= 40);
-        break;
-      case 'best-value': {
-        result = result.filter((m) => {
-          const intel = m.aa.benchmarks.intelligenceIndex;
-          const price = m.aa.pricing.blended3to1 ?? (m.inputPrice * 0.75 + m.outputPrice * 0.25);
-          return intel !== null && price > 0 && intel / price >= 20;
-        });
-        break;
-      }
-      case 'fast':
-        result = result.filter((m) => (m.aa.speed.outputTokensPerSecond ?? 0) > 80);
-        break;
-    }
-
-    return result;
-  }, [models, filter, filterMode]);
-
-  // Ordenar
   const sorted = useMemo(() => {
     const col = availableCols.find((c) => c.key === sortKey);
     if (!col) return filtered;
     return [...filtered].sort((a, b) => {
       const va = col.getValue(a);
       const vb = col.getValue(b);
-      // Nulls always go to the end
       if (va === null && vb === null) return 0;
       if (va === null) return 1;
       if (vb === null) return -1;
-      const diff = va - vb;
-      return sortAsc ? diff : -diff;
+      return sortAsc ? va - vb : vb - va;
     });
   }, [filtered, sortKey, sortAsc, availableCols]);
 
@@ -355,37 +128,43 @@ export const EnhancedModelTable = ({
   const scrollOffset = Math.max(0, safeCursor - maxRows + 1);
   const visible = sorted.slice(scrollOffset, scrollOffset + maxRows);
 
-  // Navigation mode: keys control table (active when filter is NOT focused)
+  // ── Navigation mode (table active, filter NOT focused, builder NOT open) ──
+  const tableActive = !filterActive && !showBuilder;
+
   useInput((input, key) => {
-    // ESC to cancel
-    if (key.escape && onCancel) {
-      onCancel();
-      return;
-    }
+    if (key.escape && onCancel) { onCancel(); return; }
 
-    // f activates filter text input
-    if (input === 'f') {
-      setFilterActive(true);
-      return;
-    }
+    // f: ativar filtro texto
+    if (input === 'f' && !key.shift) { setFilterActive(true); return; }
 
-    // Vertical navigation
-    if (input === 'j' || key.downArrow) {
+    // F: abrir construtor visual
+    if (input === 'F' || (input === 'f' && key.shift)) { setShowBuilder(true); return; }
+
+    // Navegacao vertical: setas cima/baixo
+    if (key.downArrow && !key.shift) {
       setCursor((c) => Math.min(c + 1, sorted.length - 1));
     }
-    if (input === 'k' || key.upArrow) {
+    if (key.upArrow && !key.shift) {
       setCursor((c) => Math.max(c - 1, 0));
     }
 
-    // Horizontal scroll
-    if (input === 'l' || (key.rightArrow && key.shift)) {
+    // Page up/down: Shift+setas
+    if (key.downArrow && key.shift) {
+      setCursor((c) => Math.min(c + maxRows, sorted.length - 1));
+    }
+    if (key.upArrow && key.shift) {
+      setCursor((c) => Math.max(c - maxRows, 0));
+    }
+
+    // Scroll horizontal: setas esquerda/direita
+    if (key.rightArrow) {
       setColOffset((c) => Math.min(c + 1, maxColOffset));
     }
-    if (input === 'h' || (key.leftArrow && key.shift)) {
+    if (key.leftArrow) {
       setColOffset((c) => Math.max(c - 1, 0));
     }
 
-    // Sort cycling
+    // Sort
     if (input === 's' && !key.shift) {
       setSortKey((prev) => {
         const idx = SORT_CYCLE.indexOf(prev);
@@ -396,7 +175,7 @@ export const EnhancedModelTable = ({
       setSortAsc((prev) => !prev);
     }
 
-    // Filter preset cycling
+    // Preset filter
     if (input === 'p') {
       setFilterMode((prev) => {
         const idx = FILTER_CYCLE.indexOf(prev);
@@ -409,9 +188,9 @@ export const EnhancedModelTable = ({
     if (key.return && sorted[safeCursor]) {
       onSelect(sorted[safeCursor]!);
     }
-  }, { isActive: !filterActive });
+  }, { isActive: tableActive });
 
-  // Filter input mode: ESC or Enter exits filter
+  // ── Filter text input mode ──
   useInput((_input, key) => {
     if (key.escape || key.return) {
       setFilterActive(false);
@@ -419,11 +198,18 @@ export const EnhancedModelTable = ({
     }
   }, { isActive: filterActive });
 
+  // ── Builder callbacks ──
+  const handleBuilderApply = (rules: readonly import('./model-table-filter.js').FilterRule[]) => {
+    setFilterText(serializeFilterRules(rules));
+    setShowBuilder(false);
+    setCursor(0);
+  };
+
   const sortLabel = availableCols.find((c) => c.key === sortKey)?.label ?? sortKey;
 
   return (
     <Box flexDirection="column" padding={1}>
-      {/* Header com filtro e info */}
+      {/* ── Header ── */}
       <Box borderStyle="round" borderColor="cyan" paddingX={2} flexDirection="column">
         {title && <Text bold color="cyan">{title}</Text>}
         <Box marginTop={1} gap={2}>
@@ -432,14 +218,14 @@ export const EnhancedModelTable = ({
               <>
                 <Text color="green" bold>Filtro: </Text>
                 <TextInput
-                  value={filter}
-                  onChange={(v) => { setFilter(v); setCursor(0); }}
-                  placeholder="nome, provider, id..."
+                  value={filterText}
+                  onChange={(v) => { setFilterText(v); setCursor(0); }}
+                  placeholder="$Intel>=40|gpt|$MMLU>=20"
                   focus={true}
                 />
               </>
             ) : (
-              <Text dimColor>Filtro: {filter || '(f para digitar)'}</Text>
+              <Text dimColor>Filtro: {filterText || '(f para digitar, F para construtor)'}</Text>
             )}
           </Box>
           <Text dimColor>|</Text>
@@ -449,61 +235,96 @@ export const EnhancedModelTable = ({
         </Box>
       </Box>
 
-      {/* Table */}
-      <Box flexDirection="column" marginTop={1}>
-        {/* Header row */}
-        <Box>
-          {visibleCols.map((col, i) => (
-            <Text key={col.key} dimColor bold={col.key === sortKey}>
-              {i > 0 ? ' ' : ''}
-              {col.align === 'left' ? pad(col.label, col.width) : padR(col.label, col.width)}
-            </Text>
-          ))}
+      {/* ── Filter builder modal (replaces table body when open) ── */}
+      {showBuilder ? (
+        <Box marginTop={1}>
+          <FilterBuilderModal
+            rules={filterRules}
+            columns={availableCols}
+            onApply={handleBuilderApply}
+            onCancel={() => setShowBuilder(false)}
+          />
         </Box>
-        <Text dimColor>{'─'.repeat(Math.min(termCols - 4, visibleCols.reduce((s, c) => s + c.width + 1, -1)))}</Text>
+      ) : (
+        /* ── Table body ── */
+        <Box flexDirection="column" marginTop={1}>
+          {/* Column headers */}
+          <Box>
+            {visibleCols.map((col, i) => (
+              <Text key={col.key} dimColor bold={col.key === sortKey}>
+                {i > 0 ? ' ' : ''}
+                {col.align === 'left' ? pad(col.label, col.width) : padR(col.label, col.width)}
+              </Text>
+            ))}
+          </Box>
+          <Text dimColor>
+            {'\u2500'.repeat(Math.min(termCols - 4, visibleCols.reduce((s, c) => s + c.width + 1, -1)))}
+          </Text>
 
-        {/* Data rows */}
-        {visible.map((m, i) => {
-          const idx = scrollOffset + i;
-          const active = idx === safeCursor;
-          return (
-            <Box key={m.id}>
-              {visibleCols.map((col, ci) => {
-                const val = col.format(m);
-                const colColor = active ? 'black' : col.color?.(m);
-                const formatted = col.align === 'left' ? pad(val, col.width) : padR(val, col.width);
-                return (
-                  <Text
-                    key={col.key}
-                    backgroundColor={active ? 'cyan' : undefined}
-                    color={colColor}
-                    dimColor={!active && !colColor}
-                  >
-                    {ci > 0 ? ' ' : ''}{formatted}
-                  </Text>
-                );
-              })}
-              {active && <Text> {'<'}</Text>}
-            </Box>
-          );
-        })}
+          {/* Data rows */}
+          {visible.map((m, i) => {
+            const idx = scrollOffset + i;
+            const active = idx === safeCursor;
+            return (
+              <Box key={m.id}>
+                {visibleCols.map((col, ci) => {
+                  const val = col.format(m);
+                  const colColor = active ? 'black' : col.color?.(m);
+                  const formatted = col.align === 'left' ? pad(val, col.width) : padR(val, col.width);
+                  return (
+                    <Text
+                      key={col.key}
+                      backgroundColor={active ? 'cyan' : undefined}
+                      color={colColor}
+                      dimColor={!active && !colColor}
+                    >
+                      {ci > 0 ? ' ' : ''}{formatted}
+                    </Text>
+                  );
+                })}
+                {active && <Text> {'<'}</Text>}
+              </Box>
+            );
+          })}
 
-        {sorted.length === 0 && (
-          <Text dimColor>Nenhum modelo encontrado</Text>
-        )}
-      </Box>
+          {sorted.length === 0 && <Text dimColor>Nenhum modelo encontrado</Text>}
+        </Box>
+      )}
 
-      {/* Footer */}
+      {/* ── Footer (always visible) ── */}
       <Box marginTop={1} flexDirection="column">
-        <Text dimColor>
-          j/k:navegar  h/l:scroll cols  s:ordenar  S:inverter  f:filtro texto  p:preset  Enter:selecionar  {onCancel ? 'ESC:voltar  ' : ''}{sorted.length}/{models.length}
-        </Text>
-        {colOffset > 0 && (
-          <Text dimColor color="yellow">{'<'} mais colunas a esquerda</Text>
+        {/* Line 1: Keybindings + count + scroll indicators */}
+        <Box gap={1}>
+          <Text dimColor>
+            {'\u2191\u2193'}:navegar  Shift+{'\u2191\u2193'}:pagina  {'\u2190\u2192'}:scroll cols  s/S:ordenar  f:filtro  F:construtor  p:preset  Enter:selecionar{onCancel ? '  ESC:voltar' : ''}
+          </Text>
+          <Text color="cyan" bold> {sorted.length}/{models.length}</Text>
+        </Box>
+        {(colOffset > 0 || colOffset < maxColOffset) && (
+          <Box gap={1}>
+            {colOffset > 0 && <Text color="yellow">{'\u25C0'} colunas a esquerda</Text>}
+            {colOffset < maxColOffset && <Text color="yellow">{'\u25B6'} colunas a direita</Text>}
+          </Box>
         )}
-        {colOffset < maxColOffset && (
-          <Text dimColor color="yellow">{'>'} mais colunas a direita (h/l para scroll)</Text>
-        )}
+
+        {/* Line 2: Benchmark legends (row 1) */}
+        <Box gap={1} marginTop={0}>
+          <Text color="cyan" bold>Intel</Text><Text dimColor>=Intelligence Index</Text>
+          <Text color="cyan" bold>Code</Text><Text dimColor>=Coding (Terminal-Bench+SciCode)</Text>
+          <Text color="cyan" bold>Math</Text><Text dimColor>=Math Index</Text>
+          <Text color="yellow" bold>MMLU</Text><Text dimColor>=MMLU-Pro (multi-domain)</Text>
+          <Text color="yellow" bold>GPQA</Text><Text dimColor>=PhD-level Q&A</Text>
+        </Box>
+
+        {/* Line 3: Benchmark legends (row 2) */}
+        <Box gap={1}>
+          <Text color="yellow" bold>HLE</Text><Text dimColor>=Humanity's Last Exam</Text>
+          <Text color="green" bold>LCB</Text><Text dimColor>=LiveCodeBench</Text>
+          <Text color="green" bold>Sci</Text><Text dimColor>=SciCode (scientific)</Text>
+          <Text color="green" bold>M500</Text><Text dimColor>=MATH-500</Text>
+          <Text color="green" bold>AIME</Text><Text dimColor>=AIME'25 (olympiad math)</Text>
+          <Text color="magenta" bold>I/$</Text><Text dimColor>=Intel/Price</Text>
+        </Box>
       </Box>
     </Box>
   );

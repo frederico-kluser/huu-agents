@@ -9,9 +9,9 @@
 
 import { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
-import TextInput from 'ink-text-input';
 import Spinner from 'ink-spinner';
 import SelectInput from 'ink-select-input';
+import { MultiLineInput } from '../components/multi-line-input.js';
 import {
   generatePipeline,
   DEFAULT_BUILDER_MODEL,
@@ -98,8 +98,14 @@ export const AiPipelineBuilderScreen = ({
   const [generatedProfile, setGeneratedProfile] = useState<WorkerProfile | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // ESC handling para fases que não têm input próprio (scope, seats, model).
+  // description: MultiLineInput cuida do ESC internamente.
+  // generating: sem cancelamento. preview/error: handlers próprios.
   useInput((_input, key) => {
-    if (key.escape && phase !== 'generating') onCancel();
+    if (key.escape && phase !== 'generating' && phase !== 'description'
+        && phase !== 'preview' && phase !== 'error') {
+      onCancel();
+    }
   });
 
   const startGeneration = useCallback(async (selectedModel: string) => {
@@ -116,9 +122,8 @@ export const AiPipelineBuilderScreen = ({
   if (phase === 'description') {
     return (
       <DescriptionPhase
-        description={description}
-        onChange={setDescription}
-        onSubmit={() => { if (description.trim().length >= 5) setPhase('scope'); }}
+        onSubmit={(text) => { setDescription(text); setPhase('scope'); }}
+        onCancel={onCancel}
       />
     );
   }
@@ -181,16 +186,16 @@ function Header({ description }: { readonly description: string }) {
   );
 }
 
-function DescriptionPhase({ description, onChange, onSubmit }: {
-  readonly description: string;
-  readonly onChange: (v: string) => void;
-  readonly onSubmit: () => void;
+function DescriptionPhase({ onSubmit, onCancel }: {
+  readonly onSubmit: (text: string) => void;
+  readonly onCancel: () => void;
 }) {
   return (
     <Box flexDirection="column" padding={1}>
       <Box borderStyle="round" borderColor="magenta" paddingX={2} paddingY={1} flexDirection="column">
         <Text bold color="magenta">{'\u{1F9E0}'} AI Pipeline Builder</Text>
         <Text dimColor>Descreva o que deseja e a IA cria a pipeline automaticamente.</Text>
+        <Text dimColor>Suporta múltiplas linhas e paste de conteúdo.</Text>
       </Box>
       <Box marginTop={1} flexDirection="column" paddingX={1}>
         <Text bold color="yellow">O que a pipeline deve fazer?</Text>
@@ -200,11 +205,11 @@ function DescriptionPhase({ description, onChange, onSubmit }: {
         <Text dimColor>  {'\u2022'} "Planejar abordagem, implementar, validar com lint e testes"</Text>
       </Box>
       <Box marginTop={1} paddingX={1}>
-        <Text bold color="cyan">{'\u276F'} </Text>
-        <TextInput value={description} onChange={onChange} onSubmit={onSubmit} placeholder="Descreva a pipeline desejada..." />
-      </Box>
-      <Box marginTop={1} paddingX={1}>
-        <Text dimColor>[Enter] confirmar  |  [ESC] cancelar</Text>
+        <MultiLineInput
+          onSubmit={onSubmit}
+          onCancel={onCancel}
+          placeholder="Descreva a pipeline desejada..."
+        />
       </Box>
     </Box>
   );

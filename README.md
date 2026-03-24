@@ -185,9 +185,24 @@ Atalho `[o]` abre a tela de opcoes de qualquer tela (exceto config inicial, load
 A tela de opcoes permite:
 - **Modelo Planner** — selecao individual do catalogo completo de 18 modelos
 - **Modelo Worker** — selecao individual do catalogo completo de 18 modelos
-- **Criar Pipeline Profile** — wizard visual para montar perfis multi-step
+- **AI Pipeline Builder** — descreva o que deseja e a IA gera a pipeline automaticamente
+- **Criar Pipeline Manual** — wizard visual para montar perfis multi-step
 
 Ao trocar modelo, a mudanca e salva imediatamente e o usuario permanece na tela de opcoes — pode trocar um ou ambos sem sair. Ao criar perfil, o wizard valida referencias antes de salvar.
+
+### AI Pipeline Builder
+
+Modo de criacao de pipelines via IA onde o usuario descreve o que deseja em linguagem natural e duas chamadas LLM geram o perfil completo:
+
+1. **Primeira chamada:** gera os steps da pipeline (tipos, templates, variaveis, fluxo)
+2. **Segunda chamada:** gera metadata (id kebab-case e descricao) a partir dos steps
+
+O usuario escolhe apenas:
+- **Escopo:** local (projeto) ou global (todos os projetos)
+- **Seats:** quantos workers rodam em paralelo
+- **Modelo LLM:** DeepSeek Chat (default), GPT-4.1, Claude, Gemini, Qwen, etc.
+
+O prompt usa few-shot learning com 3 exemplos reais do sistema (test-driven-fixer, code-review-loop, plan-implement-validate), contexto estruturado em XML tags e output JSON puro. O resultado e validado com Zod + integridade referencial antes de salvar.
 
 ### Selecao de modelos
 
@@ -229,9 +244,10 @@ src/
 │   ├── config-screen.tsx            # Config API key + selecao de modelos (setup inicial)
 │   ├── context-screen.tsx           # Selecao de arquivos/dirs
 │   ├── task-screen.tsx              # Input da macro-task
-│   ├── options-screen.tsx           # [o] Opcoes: modelos individuais + criar pipelines
+│   ├── options-screen.tsx           # [o] Opcoes: modelos, AI builder, pipeline manual
 │   ├── profile-select-screen.tsx    # Selecao de perfil antes da execucao
 │   ├── profile-builder-screen.tsx   # Wizard visual para criar perfis (via opcoes)
+│   ├── ai-pipeline-builder-screen.tsx  # Criacao de pipeline via IA (LangChain)
 │   ├── dag-view-screen.tsx          # Visualizacao do DAG
 │   ├── execution-screen.tsx         # Dashboard de execucao real-time
 │   ├── result-screen.tsx            # Resultado final + retry + pipeline trace
@@ -246,7 +262,8 @@ src/
 ├── prompts/
 │   ├── planner.ts                   # System prompt do Planner
 │   ├── explorer.prompt.ts           # System prompt do Explorer
-│   └── worker.prompt.ts             # Gerador de prompt por Worker
+│   ├── worker.prompt.ts             # Gerador de prompt por Worker
+│   └── pipeline-builder.ts         # Few-shot prompts para AI Pipeline Builder
 ├── agents/
 │   ├── explorer.agent.ts            # Sub-agente ReAct (LangChain)
 │   ├── explorer-tools.ts            # Tools read-only do Explorer
@@ -265,7 +282,8 @@ src/
 │       ├── control-handlers.ts      # condition, goto, set_variable, fail
 │       └── git-diff-handler.ts      # git_diff (captura diff do worktree)
 ├── services/
-│   └── profile-catalog.ts           # Persistencia de perfis (global + local, Result<T>)
+│   ├── profile-catalog.ts           # Persistencia de perfis (global + local, Result<T>)
+│   └── ai-pipeline-generator.ts     # Geracao de pipelines via LangChain (2 chamadas LLM)
 ├── git/
 │   ├── git-types.ts                 # Tipos Result, GitError, CommitHash
 │   ├── git-wrapper.ts               # Operacoes Git atomicas (execFile)
@@ -282,7 +300,7 @@ src/
     └── path-guard.ts                # Protecao contra path traversal
 ```
 
-55 arquivos, ~7.000 LOC (media ~127 LOC/arquivo).
+58 arquivos, ~7.500 LOC (media ~129 LOC/arquivo).
 
 ## Padroes de codigo
 

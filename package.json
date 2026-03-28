@@ -39,7 +39,11 @@
     "build": "tsc && cp src/data/bundled-benchmarks.json dist/data/bundled-benchmarks.json",
     "dev": "npx tsx src/dev.tsx",
     "lint": "eslint src/",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "release": "./scripts/release.sh",
+    "release:patch": "./scripts/release.sh patch",
+    "release:minor": "./scripts/release.sh minor",
+    "release:major": "./scripts/release.sh major"
   },
   "peerDependencies": {
     "ink": "^6.0.0",

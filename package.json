@@ -1,6 +1,6 @@
 {
   "name": "model-selector-ink",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Interactive Ink/TUI model selector with OpenRouter + Artificial Analysis integration",
   "license": "MIT",
   "author": "frederico-kluser",
@@ -45,7 +45,7 @@
     "ink": "^6.0.0",
     "ink-text-input": "^6.0.0",
     "react": "^18.0.0 || ^19.0.0",
-    "zod": "^3.20.0"
+    "zod": "^3.20.0 || ^4.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

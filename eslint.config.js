@@ -22,6 +22,12 @@ export default tseslint.config(
     },
   },
   {
+    files: ["src/dev.tsx"],
+    rules: {
+      "no-console": "off",
+    },
+  },
+  {
     ignores: ["dist/", "node_modules/"],
   }
 );

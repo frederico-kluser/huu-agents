@@ -15,6 +15,8 @@ export interface ColumnSelectorModalProps {
   readonly visibleKeys: ReadonlySet<string>;
   /** Callback ao fechar — retorna novo set de keys visiveis */
   readonly onClose: (newVisibleKeys: ReadonlySet<string>) => void;
+  /** Altura maxima disponivel para o conteudo */
+  readonly maxHeight?: number;
 }
 
 /**
@@ -26,7 +28,7 @@ export interface ColumnSelectorModalProps {
  * <ColumnSelectorModal visibleKeys={visibleMetrics} onClose={setVisibleMetrics} />
  * ```
  */
-export const ColumnSelectorModal = ({ visibleKeys, onClose }: ColumnSelectorModalProps) => {
+export const ColumnSelectorModal = ({ visibleKeys, onClose, maxHeight = 16 }: ColumnSelectorModalProps) => {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(visibleKeys));
   const [cursor, setCursor] = useState(0);
 
@@ -58,6 +60,11 @@ export const ColumnSelectorModal = ({ visibleKeys, onClose }: ColumnSelectorModa
   const focusedCol = METRIC_COLUMNS[cursor];
   const checkedCount = selected.size;
 
+  // Scroll within column list: reserve 8 lines for modal chrome (borders, title, description, footer)
+  const listHeight = Math.min(METRIC_COLUMNS.length, Math.max(3, maxHeight - 8));
+  const scrollStart = Math.max(0, cursor - listHeight + 1);
+  const visibleItems = METRIC_COLUMNS.slice(scrollStart, scrollStart + listHeight);
+
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1}>
       <Box gap={2}>
@@ -66,8 +73,10 @@ export const ColumnSelectorModal = ({ visibleKeys, onClose }: ColumnSelectorModa
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
-        {METRIC_COLUMNS.map((col, i) => {
-          const active = i === cursor;
+        {scrollStart > 0 && <Text dimColor>  {'\u2191'} mais {scrollStart} acima</Text>}
+        {visibleItems.map((col, vi) => {
+          const realIdx = scrollStart + vi;
+          const active = realIdx === cursor;
           const checked = selected.has(col.key);
           return (
             <Box key={col.key}>
@@ -80,6 +89,9 @@ export const ColumnSelectorModal = ({ visibleKeys, onClose }: ColumnSelectorModa
             </Box>
           );
         })}
+        {scrollStart + listHeight < METRIC_COLUMNS.length && (
+          <Text dimColor>  {'\u2193'} mais {METRIC_COLUMNS.length - scrollStart - listHeight} abaixo</Text>
+        )}
       </Box>
 
       {focusedCol && (

@@ -20,6 +20,8 @@ export interface SortSelectorModalProps {
   readonly onSelect: (key: string, ascending: boolean) => void;
   /** Callback quando usuario cancela */
   readonly onCancel: () => void;
+  /** Altura maxima disponivel para o conteudo */
+  readonly maxHeight?: number;
 }
 
 /**
@@ -37,7 +39,7 @@ export interface SortSelectorModalProps {
  * ```
  */
 export const SortSelectorModal = ({
-  columns, currentKey, ascending, onSelect, onCancel,
+  columns, currentKey, ascending, onSelect, onCancel, maxHeight = 16,
 }: SortSelectorModalProps) => {
   const initIdx = Math.max(0, columns.findIndex((c) => c.key === currentKey));
   const [cursor, setCursor] = useState(initIdx);
@@ -56,6 +58,11 @@ export const SortSelectorModal = ({
 
   const focusedCol = columns[cursor];
 
+  // Scroll within column list: reserve 8 lines for modal chrome (borders, title, description, footer)
+  const listHeight = Math.min(columns.length, Math.max(3, maxHeight - 8));
+  const scrollStart = Math.max(0, cursor - listHeight + 1);
+  const visibleItems = columns.slice(scrollStart, scrollStart + listHeight);
+
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={2} paddingY={1}>
       <Box gap={2}>
@@ -64,8 +71,10 @@ export const SortSelectorModal = ({
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
-        {columns.map((col, i) => {
-          const active = i === cursor;
+        {scrollStart > 0 && <Text dimColor>  {'\u2191'} mais {scrollStart} acima</Text>}
+        {visibleItems.map((col, vi) => {
+          const realIdx = scrollStart + vi;
+          const active = realIdx === cursor;
           const isCurrent = col.key === currentKey;
           return (
             <Box key={col.key}>
@@ -80,6 +89,9 @@ export const SortSelectorModal = ({
             </Box>
           );
         })}
+        {scrollStart + listHeight < columns.length && (
+          <Text dimColor>  {'\u2193'} mais {columns.length - scrollStart - listHeight} abaixo</Text>
+        )}
       </Box>
 
       {focusedCol && (

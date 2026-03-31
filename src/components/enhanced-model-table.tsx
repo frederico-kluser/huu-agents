@@ -25,8 +25,12 @@ import {
 } from './table-columns.js';
 import { formatCacheAge } from '../services/offline-benchmark-cache.js';
 
-// Header (border+title+filter+border) + table header + separator
-const FIXED_HEADER = 7;
+// Lines above data rows (without title):
+//   padding-top(1) + border-top(1) + filter-row(1) + border-bottom(1)
+//   + content-marginTop(1) + col-header(1) + separator(1) = 7
+// With title: +title-line(1) + marginTop-on-filter(1) = 9
+const HEADER_BASE = 7;
+const HEADER_TITLE_EXTRA = 2;
 
 // ── Props ───────────────────────────────────────────────────────────
 
@@ -79,8 +83,11 @@ export const EnhancedModelTable = ({
   const termCols = stdout?.columns ?? 120;
   const termRows = stdout?.rows ?? 24;
   const anyModalOpen = filterModalOpen || columnSelectorOpen || sortSelectorOpen;
-  const footerLines = (filterActive || anyModalOpen) ? 0 : 2;
-  const maxRows = Math.max(3, termRows - FIXED_HEADER - footerLines);
+  // Footer: marginTop(1) + nav-row(1) + col-indicator(1) + padding-bottom(1) = 4
+  // When hidden (modal/filter): just padding-bottom(1)
+  const footerLines = (filterActive || anyModalOpen) ? 1 : 4;
+  const headerLines = HEADER_BASE + (title ? HEADER_TITLE_EXTRA : 0);
+  const maxRows = Math.max(1, termRows - headerLines - footerLines);
 
   // Available columns: base always + visible metrics when hasAAData
   const availableCols = useMemo(() =>
@@ -252,6 +259,7 @@ export const EnhancedModelTable = ({
         <Box marginTop={1}>
           <ColumnSelectorModal
             visibleKeys={visibleMetrics}
+            maxHeight={maxRows}
             onClose={(keys) => { setVisibleMetrics(keys); setColumnSelectorOpen(false); }}
           />
         </Box>
@@ -261,6 +269,7 @@ export const EnhancedModelTable = ({
             columns={sortableCols}
             currentKey={effectiveSortKey}
             ascending={sortAsc}
+            maxHeight={maxRows}
             onSelect={(key, asc) => {
               setSortKey(key);
               setSortAsc(asc);

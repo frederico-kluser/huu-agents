@@ -46,6 +46,10 @@ export interface EnhancedModelTableProps {
   readonly refreshing?: boolean;
   /** Idade do cache em timestamp epoch (para exibir no footer) */
   readonly cacheAge?: number | null;
+  /** Percentage of terminal width to use (1-100, default: 100) */
+  readonly widthPercent?: number;
+  /** Percentage of terminal height to use (1-100, default: 100) */
+  readonly heightPercent?: number;
 }
 
 /**
@@ -60,6 +64,7 @@ export interface EnhancedModelTableProps {
 export const EnhancedModelTable = ({
   models, onSelect, title, hasAAData, onCancel,
   onRefresh, refreshing, cacheAge,
+  widthPercent, heightPercent,
 }: EnhancedModelTableProps) => {
   // Core state
   const [filter, setFilter] = useState('');
@@ -78,10 +83,14 @@ export const EnhancedModelTable = ({
   // Column visibility (only metric/speed columns toggleable)
   const [visibleMetrics, setVisibleMetrics] = useState<ReadonlySet<string>>(DEFAULT_VISIBLE_METRICS);
 
-  // Terminal dimensions
+  // Terminal dimensions (apply percentage constraints)
   const { stdout } = useStdout();
-  const termCols = stdout?.columns ?? 120;
-  const termRows = stdout?.rows ?? 24;
+  const rawCols = stdout?.columns ?? 120;
+  const rawRows = stdout?.rows ?? 24;
+  const wp = Math.max(1, Math.min(100, widthPercent ?? 100));
+  const hp = Math.max(1, Math.min(100, heightPercent ?? 100));
+  const termCols = Math.max(40, Math.floor(rawCols * wp / 100));
+  const termRows = Math.max(10, Math.floor(rawRows * hp / 100));
   const anyModalOpen = filterModalOpen || columnSelectorOpen || sortSelectorOpen;
   // Footer: marginTop(1) + nav-row(1) + col-indicator(1) + padding-bottom(1) = 4
   // When hidden (modal/filter): just padding-bottom(1)
@@ -208,7 +217,7 @@ export const EnhancedModelTable = ({
   const hasTextF = filterRules.some((r) => r.type === 'text');
 
   return (
-    <Box flexDirection="column" padding={1}>
+    <Box flexDirection="column" padding={1} width={wp < 100 ? termCols + 4 : undefined}>
       {/* ── Header ── */}
       <Box borderStyle="round" borderColor="cyan" paddingX={2} flexDirection="column">
         {title && <Text bold color="cyan">{title}</Text>}

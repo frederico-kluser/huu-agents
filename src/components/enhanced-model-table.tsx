@@ -217,7 +217,14 @@ export const EnhancedModelTable = ({
   const hasTextF = filterRules.some((r) => r.type === 'text');
 
   return (
-    <Box flexDirection="column" padding={1} width={wp < 100 ? termCols + 4 : undefined}>
+    <Box
+      flexDirection="column"
+      padding={1}
+      height={hp < 100 ? termRows : undefined}
+      width={wp < 100 ? termCols : undefined}
+      overflowX={wp < 100 ? 'hidden' : undefined}
+      overflowY={hp < 100 ? 'hidden' : undefined}
+    >
       {/* ── Header ── */}
       <Box borderStyle="round" borderColor="cyan" paddingX={2} flexDirection="column">
         {title && <Text bold color="cyan">{title}</Text>}

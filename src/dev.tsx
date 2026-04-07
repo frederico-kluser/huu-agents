@@ -10,7 +10,7 @@
  *   npx tsx src/dev.tsx --width=80 --height=70
  */
 
-import { render, Box, Text } from 'ink';
+import { render, Box, Text, useStdout } from 'ink';
 import { ModelSelector } from './index.js';
 
 const OPEN_ROUTER_KEY = process.env['OPENROUTER_API_KEY'];
@@ -32,8 +32,11 @@ const widthPercent = parseFlag('width');
 const heightPercent = parseFlag('height');
 
 const App = () => {
+  const { stdout } = useStdout();
+  const termHeight = stdout?.rows ?? 24;
+
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" height={termHeight}>
       <Box paddingX={1} paddingY={1} borderStyle="double" borderColor="green" flexDirection="column">
         <Text bold color="green">model-selector-ink — dev mode</Text>
         <Box gap={2}>

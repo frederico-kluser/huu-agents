@@ -111,7 +111,19 @@ render(<App />);
 
 ### Controlling Component Size
 
-By default the component uses 100% of the terminal width and height. Use `widthPercent` and `heightPercent` to constrain it to a fraction of the available space. Values are clamped to the range `1-100` and the component enforces minimum dimensions of 40 columns and 10 rows to prevent broken layouts.
+By default the component uses 100% of the terminal width and height. Use `widthPercent` and `heightPercent` to constrain it. The component enforces minimum dimensions of 40 columns and 10 rows to prevent broken layouts.
+
+**Value modes:**
+
+| Value | Behavior | Example |
+|-------|----------|---------|
+| `undefined` or `100` | Full terminal (default) | `widthPercent={100}` |
+| Positive `1-99` | Percentage of terminal size | `widthPercent={60}` uses 60% of terminal width |
+| Negative | Full terminal minus \|value\| | `heightPercent={-5}` uses all rows minus 5 |
+
+Negative values are useful when your app has a fixed header, footer, or other chrome and you want the selector to fill the remaining space. For example, if your app has a 5-line header, use `heightPercent={-5}` so the table occupies all available rows minus those 5.
+
+#### Percentage mode
 
 ```tsx
 import React from 'react';
@@ -136,6 +148,37 @@ const App = () => {
 render(<App />);
 ```
 
+#### Negative offset mode
+
+```tsx
+import React from 'react';
+import { render } from 'ink';
+import { Box, Text } from 'ink';
+import { ModelSelector } from 'model-selector-ink';
+
+const App = () => {
+  return (
+    <Box flexDirection="column">
+      {/* 3-line app header */}
+      <Box borderStyle="round" paddingX={1}>
+        <Text bold>My App</Text>
+      </Box>
+
+      {/* Table fills remaining height (all rows minus 3 for the header) */}
+      <ModelSelector
+        heightPercent={-3}
+        onSelect={(model) => {
+          console.log(model.id);
+          process.exit(0);
+        }}
+      />
+    </Box>
+  );
+};
+
+render(<App />);
+```
+
 Both props work independently. You can constrain only one axis:
 
 ```tsx
@@ -145,7 +188,13 @@ Both props work independently. You can constrain only one axis:
 // Full width, 60% of the terminal height
 <ModelSelector heightPercent={60} onSelect={handleSelect} />
 
-// Both constrained
+// Full width, all rows minus 5
+<ModelSelector heightPercent={-5} onSelect={handleSelect} />
+
+// All columns minus 10, all rows minus 3
+<ModelSelector widthPercent={-10} heightPercent={-3} onSelect={handleSelect} />
+
+// Both constrained by percentage
 <ModelSelector widthPercent={80} heightPercent={70} onSelect={handleSelect} />
 ```
 
@@ -156,7 +205,7 @@ The same props are available on `EnhancedModelTable` for advanced usage:
   models={enriched}
   hasAAData={true}
   widthPercent={50}
-  heightPercent={50}
+  heightPercent={-5}
   onSelect={handleSelect}
 />
 ```
@@ -196,8 +245,8 @@ High-level container. It handles loading, enrichment, cache fallback, refresh, a
 | `onSelect` | `(model: EnrichedModel) => void` | Called when the user presses `Enter` on a row. |
 | `onCancel` | `() => void` | Optional callback fired on `ESC`. |
 | `title` | `string | undefined` | Optional title shown above the table. |
-| `widthPercent` | `number | undefined` | Percentage of terminal width to use (1-100, default: 100). |
-| `heightPercent` | `number | undefined` | Percentage of terminal height to use (1-100, default: 100). |
+| `widthPercent` | `number | undefined` | Controls width: positive 1-100 for percentage, negative for full minus \|value\| columns (default: full). |
+| `heightPercent` | `number | undefined` | Controls height: positive 1-100 for percentage, negative for full minus \|value\| rows (default: full). |
 
 Behavior:
 
@@ -221,8 +270,8 @@ Low-level interactive table. Use this when you already manage loading yourself.
 | `onRefresh` | `() => void` | Optional refresh handler triggered by `u`. |
 | `refreshing` | `boolean | undefined` | When true, the footer shows `atualizando...`. |
 | `cacheAge` | `number | null | undefined` | Epoch timestamp used to display cache freshness in the footer. Despite the name, this is a timestamp, not a duration. |
-| `widthPercent` | `number | undefined` | Percentage of terminal width to use (1-100, default: 100). |
-| `heightPercent` | `number | undefined` | Percentage of terminal height to use (1-100, default: 100). |
+| `widthPercent` | `number | undefined` | Controls width: positive 1-100 for percentage, negative for full minus \|value\| columns (default: full). |
+| `heightPercent` | `number | undefined` | Controls height: positive 1-100 for percentage, negative for full minus \|value\| rows (default: full). |
 
 Default interaction state inside the table:
 
@@ -784,11 +833,17 @@ npm run dev -- --width=50
 # 60% of the terminal height
 npm run dev -- --height=60
 
-# Both constrained
+# Both constrained by percentage
 npm run dev -- --width=80 --height=70
+
+# Full height minus 5 rows (useful when app has header/footer)
+npm run dev -- --height=-5
+
+# Full width minus 10 columns
+npm run dev -- --width=-10
 ```
 
-Values must be between 1 and 100. The dev header displays the configured size when any flag is set.
+Values must be 1-100 (percentage) or negative (offset from full size). The dev header displays the configured size when any flag is set.
 
 `npm run build` compiles TypeScript and copies `src/data/bundled-benchmarks.json` into `dist/data/`.
 

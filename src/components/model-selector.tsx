@@ -30,9 +30,19 @@ export interface ModelSelectorProps {
   readonly onCancel?: () => void;
   /** Title displayed above the table */
   readonly title?: string;
-  /** Percentage of terminal width to use (1-100, default: 100) */
+  /**
+   * Controls the component width.
+   * - Positive (1-100): percentage of terminal width
+   * - Negative: full terminal width minus |value| columns (e.g. -10 = all columns minus 10)
+   * - undefined or 100: full terminal width (default)
+   */
   readonly widthPercent?: number;
-  /** Percentage of terminal height to use (1-100, default: 100) */
+  /**
+   * Controls the component height.
+   * - Positive (1-100): percentage of terminal height
+   * - Negative: full terminal height minus |value| rows (e.g. -5 = all rows minus 5)
+   * - undefined or 100: full terminal height (default)
+   */
   readonly heightPercent?: number;
 }
 

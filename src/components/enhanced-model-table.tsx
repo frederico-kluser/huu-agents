@@ -46,9 +46,19 @@ export interface EnhancedModelTableProps {
   readonly refreshing?: boolean;
   /** Idade do cache em timestamp epoch (para exibir no footer) */
   readonly cacheAge?: number | null;
-  /** Percentage of terminal width to use (1-100, default: 100) */
+  /**
+   * Controls the component width.
+   * - Positive (1-100): percentage of terminal width
+   * - Negative: full terminal width minus |value| columns (e.g. -10 = all columns minus 10)
+   * - undefined or 100: full terminal width (default)
+   */
   readonly widthPercent?: number;
-  /** Percentage of terminal height to use (1-100, default: 100) */
+  /**
+   * Controls the component height.
+   * - Positive (1-100): percentage of terminal height
+   * - Negative: full terminal height minus |value| rows (e.g. -5 = all rows minus 5)
+   * - undefined or 100: full terminal height (default)
+   */
   readonly heightPercent?: number;
 }
 
@@ -83,14 +93,20 @@ export const EnhancedModelTable = ({
   // Column visibility (only metric/speed columns toggleable)
   const [visibleMetrics, setVisibleMetrics] = useState<ReadonlySet<string>>(DEFAULT_VISIBLE_METRICS);
 
-  // Terminal dimensions (apply percentage constraints)
+  // Terminal dimensions (apply constraints)
+  // Positive 1-99: percentage | Negative: full minus |value| | undefined/100: full
   const { stdout } = useStdout();
   const rawCols = stdout?.columns ?? 120;
   const rawRows = stdout?.rows ?? 24;
-  const wp = Math.max(1, Math.min(100, widthPercent ?? 100));
-  const hp = Math.max(1, Math.min(100, heightPercent ?? 100));
-  const termCols = Math.max(40, Math.floor(rawCols * wp / 100));
-  const termRows = Math.max(10, Math.floor(rawRows * hp / 100));
+  const computeDim = (raw: number, pct: number | undefined, min: number) => {
+    if (pct === undefined || pct === 100) return raw;
+    if (pct < 0) return Math.max(min, raw + pct);
+    return Math.max(min, Math.floor(raw * Math.max(1, Math.min(100, pct)) / 100));
+  };
+  const termCols = computeDim(rawCols, widthPercent, 40);
+  const termRows = computeDim(rawRows, heightPercent, 10);
+  const widthConstrained = widthPercent !== undefined && widthPercent !== 100;
+  const heightConstrained = heightPercent !== undefined && heightPercent !== 100;
   const anyModalOpen = filterModalOpen || columnSelectorOpen || sortSelectorOpen;
   // Footer: marginTop(1) + nav-row(1) + col-indicator(1) + padding-bottom(1) = 4
   // When hidden (modal/filter): just padding-bottom(1)
@@ -220,10 +236,10 @@ export const EnhancedModelTable = ({
     <Box
       flexDirection="column"
       padding={1}
-      height={hp < 100 ? termRows : undefined}
-      width={wp < 100 ? termCols : undefined}
-      overflowX={wp < 100 ? 'hidden' : undefined}
-      overflowY={hp < 100 ? 'hidden' : undefined}
+      height={heightConstrained ? termRows : undefined}
+      width={widthConstrained ? termCols : undefined}
+      overflowX={widthConstrained ? 'hidden' : undefined}
+      overflowY={heightConstrained ? 'hidden' : undefined}
     >
       {/* ── Header ── */}
       <Box borderStyle="round" borderColor="cyan" paddingX={2} flexDirection="column">

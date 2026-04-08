@@ -1,13 +1,19 @@
 #!/usr/bin/env node
 /**
  * Dev entry point — renders the ModelSelector for visual testing.
- * Usage: npx tsx src/dev.tsx [--width=<percent>] [--height=<percent>]
+ * Usage: npx tsx src/dev.tsx [--width=<value>] [--height=<value>]
+ *
+ * Values:
+ *   1-100    percentage of terminal size
+ *   negative full terminal minus |value| (e.g. --height=-5 = all rows minus 5)
  *
  * Examples:
  *   npx tsx src/dev.tsx                     # full terminal
  *   npx tsx src/dev.tsx --width=50          # 50% width, full height
  *   npx tsx src/dev.tsx --height=60         # full width, 60% height
  *   npx tsx src/dev.tsx --width=80 --height=70
+ *   npx tsx src/dev.tsx --height=-5         # full height minus 5 rows
+ *   npx tsx src/dev.tsx --width=-10         # full width minus 10 columns
  */
 
 import { render, Box, Text, useStdout } from 'ink';
@@ -16,13 +22,13 @@ import { ModelSelector } from './index.js';
 const OPEN_ROUTER_KEY = process.env['OPENROUTER_API_KEY'];
 const AA_KEY = process.env['ARTIFICIAL_ANALYSIS_API_KEY'];
 
-// Parse --width=N and --height=N flags
+// Parse --width=N and --height=N flags (positive 1-100 or negative for offset)
 function parseFlag(name: string): number | undefined {
   const arg = process.argv.find((a) => a.startsWith(`--${name}=`));
   if (!arg) return undefined;
   const val = Number(arg.split('=')[1]);
-  if (Number.isNaN(val) || val < 1 || val > 100) {
-    console.error(`Invalid --${name} value (must be 1-100): ${arg.split('=')[1]}`);
+  if (Number.isNaN(val) || val === 0 || val > 100) {
+    console.error(`Invalid --${name} value (must be 1-100 or negative): ${arg.split('=')[1]}`);
     process.exit(1);
   }
   return val;
@@ -43,7 +49,7 @@ const App = () => {
           <Text dimColor>OpenRouter: {OPEN_ROUTER_KEY ? 'key set' : 'public (no key)'}</Text>
           <Text dimColor>AA: {AA_KEY ? 'key set' : 'disabled'}</Text>
           {(widthPercent || heightPercent) && (
-            <Text dimColor>Size: {widthPercent ?? 100}%w x {heightPercent ?? 100}%h</Text>
+            <Text dimColor>Size: {widthPercent !== undefined && widthPercent < 0 ? `${widthPercent}` : `${widthPercent ?? 100}%`}w x {heightPercent !== undefined && heightPercent < 0 ? `${heightPercent}` : `${heightPercent ?? 100}%`}h</Text>
           )}
         </Box>
       </Box>

@@ -108,9 +108,10 @@ export const EnhancedModelTable = ({
   const widthConstrained = widthPercent !== undefined && widthPercent !== 100;
   const heightConstrained = heightPercent !== undefined && heightPercent !== 100;
   const anyModalOpen = filterModalOpen || columnSelectorOpen || sortSelectorOpen;
-  // Footer: marginTop(1) + nav-row(1) + col-indicator(1) + padding-bottom(1) = 4
-  // When hidden (modal/filter): just padding-bottom(1)
-  const footerLines = (filterActive || anyModalOpen) ? 1 : 4;
+  // Footer: marginTop(1) + nav-rows(wraps on narrow terminals) + col-indicator(1) + padding-bottom(1)
+  // Nav help items total ~160 chars; estimate wrap lines from terminal width
+  const footerNavLines = Math.max(1, Math.ceil(160 / Math.max(1, termCols - 2)));
+  const footerLines = (filterActive || anyModalOpen) ? 1 : (1 + footerNavLines + 1 + 1);
   const headerLines = HEADER_BASE + (title ? HEADER_TITLE_EXTRA : 0);
   const maxRows = Math.max(1, termRows - headerLines - footerLines);
 
@@ -312,14 +313,14 @@ export const EnhancedModelTable = ({
         </Box>
       ) : (
         <Box flexDirection="column" marginTop={1}>
-          <Box>
+          <Box flexShrink={0}>
             {visibleCols.map((col, i) => (
               <Text key={col.key} dimColor bold={col.key === effectiveSortKey}>
                 {i > 0 ? ' ' : ''}{col.align === 'left' ? pad(col.label, col.width) : padR(col.label, col.width)}
               </Text>
             ))}
           </Box>
-          <Text dimColor>{'\u2500'.repeat(Math.min(termCols - 4, visibleCols.reduce((s, c) => s + c.width + 1, -1)))}</Text>
+          <Box flexShrink={0}><Text dimColor>{'\u2500'.repeat(Math.min(termCols - 4, visibleCols.reduce((s, c) => s + c.width + 1, -1)))}</Text></Box>
 
           {visible.map((m, i) => {
             const idx = scrollOffset + i;

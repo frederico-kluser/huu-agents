@@ -109,6 +109,58 @@ const App = () => {
 render(<App />);
 ```
 
+### Controlling Component Size
+
+By default the component uses 100% of the terminal width and height. Use `widthPercent` and `heightPercent` to constrain it to a fraction of the available space. Values are clamped to the range `1-100` and the component enforces minimum dimensions of 40 columns and 10 rows to prevent broken layouts.
+
+```tsx
+import React from 'react';
+import { render } from 'ink';
+import { ModelSelector } from 'model-selector-ink';
+
+const App = () => {
+  return (
+    <ModelSelector
+      widthPercent={60}
+      heightPercent={75}
+      title="Compact selector"
+      onSelect={(model) => {
+        console.log(model.id);
+        process.exit(0);
+      }}
+      onCancel={() => process.exit(0)}
+    />
+  );
+};
+
+render(<App />);
+```
+
+Both props work independently. You can constrain only one axis:
+
+```tsx
+// Half the terminal width, full height
+<ModelSelector widthPercent={50} onSelect={handleSelect} />
+
+// Full width, 60% of the terminal height
+<ModelSelector heightPercent={60} onSelect={handleSelect} />
+
+// Both constrained
+<ModelSelector widthPercent={80} heightPercent={70} onSelect={handleSelect} />
+```
+
+The same props are available on `EnhancedModelTable` for advanced usage:
+
+```tsx
+<EnhancedModelTable
+  models={enriched}
+  hasAAData={true}
+  widthPercent={50}
+  heightPercent={50}
+  onSelect={handleSelect}
+/>
+```
+
 ## Which API Should You Use?
 
 | Goal | Use |
@@ -144,6 +196,8 @@ High-level container. It handles loading, enrichment, cache fallback, refresh, a
 | `onSelect` | `(model: EnrichedModel) => void` | Called when the user presses `Enter` on a row. |
 | `onCancel` | `() => void` | Optional callback fired on `ESC`. |
 | `title` | `string | undefined` | Optional title shown above the table. |
+| `widthPercent` | `number | undefined` | Percentage of terminal width to use (1-100, default: 100). |
+| `heightPercent` | `number | undefined` | Percentage of terminal height to use (1-100, default: 100). |
 
 Behavior:
 
@@ -167,6 +221,8 @@ Low-level interactive table. Use this when you already manage loading yourself.
 | `onRefresh` | `() => void` | Optional refresh handler triggered by `u`. |
 | `refreshing` | `boolean | undefined` | When true, the footer shows `atualizando...`. |
 | `cacheAge` | `number | null | undefined` | Epoch timestamp used to display cache freshness in the footer. Despite the name, this is a timestamp, not a duration. |
+| `widthPercent` | `number | undefined` | Percentage of terminal width to use (1-100, default: 100). |
+| `heightPercent` | `number | undefined` | Percentage of terminal height to use (1-100, default: 100). |
 
 Default interaction state inside the table:
 
@@ -715,6 +771,24 @@ Development entrypoint:
 ```bash
 OPENROUTER_API_KEY=sk-or-... ARTIFICIAL_ANALYSIS_API_KEY=aa-... npm run dev
 ```
+
+The dev entrypoint supports `--width` and `--height` flags to test the sizing feature:
+
+```bash
+# Full terminal (default)
+npm run dev
+
+# 50% of the terminal width
+npm run dev -- --width=50
+
+# 60% of the terminal height
+npm run dev -- --height=60
+
+# Both constrained
+npm run dev -- --width=80 --height=70
+```
+
+Values must be between 1 and 100. The dev header displays the configured size when any flag is set.
 
 `npm run build` compiles TypeScript and copies `src/data/bundled-benchmarks.json` into `dist/data/`.
 

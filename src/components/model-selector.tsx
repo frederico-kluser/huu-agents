@@ -30,6 +30,10 @@ export interface ModelSelectorProps {
   readonly onCancel?: () => void;
   /** Title displayed above the table */
   readonly title?: string;
+  /** Percentage of terminal width to use (1-100, default: 100) */
+  readonly widthPercent?: number;
+  /** Percentage of terminal height to use (1-100, default: 100) */
+  readonly heightPercent?: number;
 }
 
 /**
@@ -59,6 +63,8 @@ export const ModelSelector = ({
   onSelect,
   onCancel,
   title,
+  widthPercent,
+  heightPercent,
 }: ModelSelectorProps) => {
   const { state: modelsState, forceRefresh: refreshModels } = useModels(openRouterApiKey);
   const { state: aaState, forceRefresh: refreshAA } = useArtificialAnalysis(artificialAnalysisApiKey);
@@ -127,6 +133,8 @@ export const ModelSelector = ({
       onRefresh={handleRefresh}
       refreshing={refreshing}
       cacheAge={cacheAge}
+      widthPercent={widthPercent}
+      heightPercent={heightPercent}
     />
   );
 };

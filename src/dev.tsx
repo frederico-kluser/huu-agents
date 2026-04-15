@@ -1,29 +1,41 @@
 #!/usr/bin/env node
 /**
  * Dev entry point — renders the ModelSelector for visual testing.
- * Usage: npx tsx src/dev.tsx [--width=<value>] [--height=<value>]
  *
- * Values:
+ * Required: both API keys must be provided (via flags or env vars).
+ * Flags take priority over environment variables.
+ *
+ * Usage:
+ *   npx tsx src/dev.tsx --openrouter-key=<key> --aa-key=<key> [--width=<value>] [--height=<value>]
+ *
+ * API key flags:
+ *   --openrouter-key=<key>   OpenRouter API key (fallback: OPENROUTER_API_KEY env var)
+ *   --aa-key=<key>           Artificial Analysis API key (fallback: ARTIFICIAL_ANALYSIS_API_KEY env var)
+ *
+ * Size values:
  *   1-100    percentage of terminal size
  *   negative full terminal minus |value| (e.g. --height=-5 = all rows minus 5)
  *
  * Examples:
- *   npx tsx src/dev.tsx                     # full terminal
- *   npx tsx src/dev.tsx --width=50          # 50% width, full height
- *   npx tsx src/dev.tsx --height=60         # full width, 60% height
- *   npx tsx src/dev.tsx --width=80 --height=70
- *   npx tsx src/dev.tsx --height=-5         # full height minus 5 rows
- *   npx tsx src/dev.tsx --width=-10         # full width minus 10 columns
+ *   npx tsx src/dev.tsx --openrouter-key=sk-or-... --aa-key=aa-...
+ *   OPENROUTER_API_KEY=sk-or-... ARTIFICIAL_ANALYSIS_API_KEY=aa-... npx tsx src/dev.tsx
+ *   npx tsx src/dev.tsx --openrouter-key=sk-or-... --aa-key=aa-... --width=80 --height=70
  */
 
 import { render, Box, Text, useStdout } from 'ink';
 import { ModelSelector } from './index.js';
 
-const OPEN_ROUTER_KEY = process.env['OPENROUTER_API_KEY'];
-const AA_KEY = process.env['ARTIFICIAL_ANALYSIS_API_KEY'];
+// Parse a string flag from CLI args (e.g. --openrouter-key=value)
+function parseStringFlag(name: string): string | undefined {
+  const arg = process.argv.find((a) => a.startsWith(`--${name}=`));
+  if (!arg) return undefined;
+  const value = arg.slice(`--${name}=`.length);
+  if (!value) return undefined;
+  return value;
+}
 
-// Parse --width=N and --height=N flags (positive 1-100 or negative for offset)
-function parseFlag(name: string): number | undefined {
+// Parse a numeric flag from CLI args (positive 1-100 or negative for offset)
+function parseNumericFlag(name: string): number | undefined {
   const arg = process.argv.find((a) => a.startsWith(`--${name}=`));
   if (!arg) return undefined;
   const val = Number(arg.split('=')[1]);
@@ -34,8 +46,28 @@ function parseFlag(name: string): number | undefined {
   return val;
 }
 
-const widthPercent = parseFlag('width');
-const heightPercent = parseFlag('height');
+// Resolve API keys: flag > env var
+const OPEN_ROUTER_KEY = parseStringFlag('openrouter-key') ?? process.env['OPENROUTER_API_KEY'];
+const AA_KEY = parseStringFlag('aa-key') ?? process.env['ARTIFICIAL_ANALYSIS_API_KEY'];
+
+// Validate required API keys
+const missingKeys: string[] = [];
+if (!OPEN_ROUTER_KEY) missingKeys.push('OpenRouter (--openrouter-key=<key> or OPENROUTER_API_KEY env var)');
+if (!AA_KEY) missingKeys.push('Artificial Analysis (--aa-key=<key> or ARTIFICIAL_ANALYSIS_API_KEY env var)');
+
+if (missingKeys.length > 0) {
+  console.error('\n  ✖ Missing required API key(s):\n');
+  for (const key of missingKeys) {
+    console.error(`    • ${key}`);
+  }
+  console.error('\n  Provide them via CLI flags or environment variables.\n');
+  console.error('  Example:');
+  console.error('    npx tsx src/dev.tsx --openrouter-key=sk-or-... --aa-key=aa-...\n');
+  process.exit(1);
+}
+
+const widthPercent = parseNumericFlag('width');
+const heightPercent = parseNumericFlag('height');
 
 const App = () => {
   const { stdout } = useStdout();

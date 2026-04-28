@@ -2,11 +2,11 @@
  * Hook React para carregar dados da Artificial Analysis API.
  * Gerencia loading, erro e cache transparentemente.
  *
- * Hierarquia de cache:
- * 1. Cache em memória (no artificial-analysis-client)
- * 2. Cache global em disco (configuravel via CacheConfig)
- * 3. Bundled fallback (bundled-benchmarks.json)
- * 4. Fetch da API (ultima opcao)
+ * Estratégia: API-first em cada run (quando há apiKey).
+ * 1. Sempre tenta a API AA primeiro (invalidando cache em memória).
+ * 2. Em sucesso: atualiza disco para sempre ter snapshot recente.
+ * 3. Em falha: fallback para cache em disco (qualquer idade) → bundled.
+ * 4. Sem apiKey: usa apenas cache em disco/bundled (não há API a chamar).
  *
  * @module
  */
@@ -20,9 +20,9 @@ import {
   invalidateAACache,
 } from '../data/artificial-analysis-client.js';
 import {
-  loadGlobalCache,
   loadGlobalCacheIgnoreTTL,
   loadBundledData,
+  saveAAToCache,
 } from '../services/offline-benchmark-cache.js';
 
 /** Estado do carregamento de dados AA */
@@ -34,8 +34,8 @@ export type AAState =
 
 /**
  * Hook para carregar benchmarks da Artificial Analysis API.
- * Retorna 'idle' se nenhuma apiKey for fornecida E nao ha cache offline.
- * Tenta cache em memoria → disco → bundled → API, nessa ordem.
+ * Quando há apiKey: sempre tenta a API primeiro a cada run; só usa cache se a API falhar.
+ * Quando não há apiKey: tenta cache em disco/bundled (idle se nada disponível).
  *
  * @param apiKey - API key da Artificial Analysis (opcional)
  * @returns Estado dos dados AA, funcao de reload e force refresh
@@ -55,11 +55,11 @@ export const useArtificialAnalysis = (apiKey?: string) => {
         : { status: 'loading' },
   );
 
-  const seededRef = useRef(false);
+  const initRef = useRef(false);
 
-  /** Tenta semear cache de memória a partir do disco/bundled (funciona sem API key) */
-  const seedFromDisk = useCallback(async (): Promise<boolean> => {
-    const diskCache = await loadGlobalCache();
+  /** Carrega fallback offline: disco (qualquer idade) → bundled. */
+  const loadOfflineFallback = useCallback(async (): Promise<boolean> => {
+    const diskCache = await loadGlobalCacheIgnoreTTL();
     if (diskCache && diskCache.aaModels.length > 0) {
       seedAACache(diskCache.aaModels, diskCache.timestamp);
       setState({ status: 'loaded', models: diskCache.aaModels, cacheAge: diskCache.timestamp });
@@ -76,68 +76,47 @@ export const useArtificialAnalysis = (apiKey?: string) => {
     return false;
   }, []);
 
-  /** Busca dados da API AA */
-  const fetchData = useCallback(async () => {
+  /** API-first: invalida memória, busca API, persiste em disco; em erro vai para fallback. */
+  const fetchFromAPI = useCallback(async (): Promise<boolean> => {
     if (!apiKey) {
-      setState({ status: 'idle' });
-      return;
+      const fellBack = await loadOfflineFallback();
+      if (!fellBack) setState({ status: 'idle' });
+      return false;
     }
 
-    setState((prev) => {
-      if (prev.status === 'loaded') return prev;
-      return { status: 'loading' };
-    });
-
-    const result = await fetchAAModels(apiKey);
-    if (result.ok) {
-      setState({ status: 'loaded', models: result.models, cacheAge: Date.now() });
-      return;
-    }
-
-    // Se API falhou, tentar cache expirado
-    const staleCache = await loadGlobalCacheIgnoreTTL();
-    if (staleCache && staleCache.aaModels.length > 0) {
-      seedAACache(staleCache.aaModels, staleCache.timestamp);
-      setState({ status: 'loaded', models: staleCache.aaModels, cacheAge: staleCache.timestamp });
-      return;
-    }
-
-    setState({ status: 'error', error: result.error });
-  }, [apiKey]);
-
-  /** Force refresh: invalida cache, busca da API */
-  const forceRefresh = useCallback(async () => {
-    if (!apiKey) return false;
     invalidateAACache();
     const result = await fetchAAModels(apiKey);
+
     if (result.ok) {
       setState({ status: 'loaded', models: result.models, cacheAge: Date.now() });
+      void saveAAToCache(result.models);
       return true;
     }
-    setState({ status: 'error', error: result.error });
+
+    const fellBack = await loadOfflineFallback();
+    if (!fellBack) {
+      setState({ status: 'error', error: result.error });
+    }
     return false;
-  }, [apiKey]);
+  }, [apiKey, loadOfflineFallback]);
+
+  /** Reload: novo fetch da API (mesmo fluxo do load inicial). */
+  const reload = useCallback(async () => {
+    setState((prev) => (prev.status === 'loaded' ? prev : { status: 'loading' }));
+    await fetchFromAPI();
+  }, [fetchFromAPI]);
+
+  /** Force refresh: idêntico ao reload — sempre vai para a API. */
+  const forceRefresh = useCallback(async () => {
+    setState((prev) => (prev.status === 'loaded' ? prev : { status: 'loading' }));
+    return await fetchFromAPI();
+  }, [fetchFromAPI]);
 
   useEffect(() => {
-    if (!apiKey) {
-      if (!seededRef.current) {
-        seededRef.current = true;
-        void seedFromDisk().then((seeded) => {
-          if (!seeded) setState({ status: 'idle' });
-        });
-      }
-      return;
-    }
+    if (initRef.current) return;
+    initRef.current = true;
+    void fetchFromAPI();
+  }, [fetchFromAPI]);
 
-    if (cached) return;
-
-    if (!seededRef.current) {
-      seededRef.current = true;
-      void seedFromDisk().then((seeded) => {
-        if (!seeded) void fetchData();
-      });
-    }
-  }, [apiKey, cached, seedFromDisk, fetchData]);
-
-  return { state, reload: fetchData, forceRefresh } as const;
+  return { state, reload, forceRefresh } as const;
 };

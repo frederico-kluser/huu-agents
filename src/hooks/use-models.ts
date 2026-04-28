@@ -2,11 +2,10 @@
  * Hook React para carregar modelos da OpenRouter de forma assíncrona.
  * Gerencia loading, erro e cache transparentemente.
  *
- * Hierarquia de cache:
- * 1. Cache em memória (no openrouter-client)
- * 2. Cache global em disco (configuravel via CacheConfig)
- * 3. Bundled fallback (bundled-benchmarks.json)
- * 4. Fetch da API (ultima opcao)
+ * Estratégia: API-first em cada run.
+ * 1. Sempre tenta a API OpenRouter primeiro (invalidando cache em memória).
+ * 2. Em sucesso: atualiza disco para sempre ter snapshot recente.
+ * 3. Em falha: fallback para cache em disco (qualquer idade) → bundled → erro.
  *
  * @module
  */
@@ -14,11 +13,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ModelEntry } from '../data/models.js';
 import { loadModels, getModelsCached, toModelEntry } from '../data/models.js';
-import { seedCache, invalidateCache } from '../data/openrouter-client.js';
 import {
-  loadGlobalCache,
+  seedCache,
+  invalidateCache,
+  getCachedModels as getCachedRawModels,
+} from '../data/openrouter-client.js';
+import {
   loadGlobalCacheIgnoreTTL,
   loadBundledData,
+  saveOpenRouterToCache,
 } from '../services/offline-benchmark-cache.js';
 
 /** Estado do carregamento de modelos */
@@ -29,7 +32,7 @@ export type ModelsState =
 
 /**
  * Hook para carregar modelos da OpenRouter API.
- * Tenta cache em memoria → disco → bundled → API, nessa ordem.
+ * Sempre tenta a API primeiro a cada run; só usa cache se a API falhar.
  * Retorna estado reativo com loading/loaded/error.
  *
  * @param apiKey - API key para autenticação (opcional)
@@ -50,11 +53,11 @@ export const useModels = (apiKey?: string) => {
       : { status: 'loading' },
   );
 
-  const seededRef = useRef(false);
+  const initRef = useRef(false);
 
-  /** Tenta semear cache de memória a partir do disco/bundled */
-  const seedFromDisk = useCallback(async (): Promise<boolean> => {
-    const diskCache = await loadGlobalCache();
+  /** Carrega fallback offline: disco (qualquer idade) → bundled. */
+  const loadOfflineFallback = useCallback(async (): Promise<boolean> => {
+    const diskCache = await loadGlobalCacheIgnoreTTL();
     if (diskCache && diskCache.openRouterModels.length > 0) {
       seedCache(diskCache.openRouterModels, diskCache.timestamp);
       const models = diskCache.openRouterModels.map(toModelEntry);
@@ -73,61 +76,46 @@ export const useModels = (apiKey?: string) => {
     return false;
   }, []);
 
-  /** Busca modelos da API e salva no cache global */
-  const fetchAndSave = useCallback(async () => {
-    setState((prev) => {
-      if (prev.status === 'loaded') return prev;
-      return { status: 'loading' };
-    });
-
+  /** API-first: invalida memória, busca API, persiste em disco; em erro vai para fallback. */
+  const fetchFromAPI = useCallback(async (): Promise<boolean> => {
+    invalidateCache();
     const result = await loadModels(apiKey);
+
     if (result.ok) {
       setState({ status: 'loaded', models: result.models, cacheAge: Date.now() });
+      // Atualiza cache em disco com snapshot fresco
+      const raw = getCachedRawModels();
+      if (raw && raw.length > 0) {
+        void saveOpenRouterToCache(raw);
+      }
       return true;
     }
 
-    // Se API falhou, tentar cache expirado como ultimo recurso
-    const staleCache = await loadGlobalCacheIgnoreTTL();
-    if (staleCache && staleCache.openRouterModels.length > 0) {
-      seedCache(staleCache.openRouterModels, staleCache.timestamp);
-      const models = staleCache.openRouterModels.map(toModelEntry);
-      setState({ status: 'loaded', models, cacheAge: staleCache.timestamp });
-      return false;
-    }
-
-    setState({ status: 'error', error: result.error });
-    return false;
-  }, [apiKey]);
-
-  /** Reload: busca da API sem invalidar cache */
-  const reload = useCallback(async () => {
-    await fetchAndSave();
-  }, [fetchAndSave]);
-
-  /** Force refresh: invalida cache, busca da API */
-  const forceRefresh = useCallback(async () => {
-    invalidateCache();
-    const result = await loadModels(apiKey);
-    if (result.ok) {
-      setState({ status: 'loaded', models: result.models, cacheAge: Date.now() });
-    } else {
+    // API falhou — usa cache em disco (qualquer idade) ou bundled
+    const fellBack = await loadOfflineFallback();
+    if (!fellBack) {
       setState({ status: 'error', error: result.error });
     }
-    return result.ok;
-  }, [apiKey]);
+    return false;
+  }, [apiKey, loadOfflineFallback]);
+
+  /** Reload: novo fetch da API (mesmo fluxo do load inicial). */
+  const reload = useCallback(async () => {
+    setState((prev) => (prev.status === 'loaded' ? prev : { status: 'loading' }));
+    await fetchFromAPI();
+  }, [fetchFromAPI]);
+
+  /** Force refresh: idêntico ao reload — sempre vai para a API. */
+  const forceRefresh = useCallback(async () => {
+    setState((prev) => (prev.status === 'loaded' ? prev : { status: 'loading' }));
+    return await fetchFromAPI();
+  }, [fetchFromAPI]);
 
   useEffect(() => {
-    if (cached.length > 0) return;
-
-    if (!seededRef.current) {
-      seededRef.current = true;
-      void seedFromDisk().then((seeded) => {
-        if (!seeded) {
-          void fetchAndSave();
-        }
-      });
-    }
-  }, [cached.length, seedFromDisk, fetchAndSave]);
+    if (initRef.current) return;
+    initRef.current = true;
+    void fetchFromAPI();
+  }, [fetchFromAPI]);
 
   return { state, reload, forceRefresh } as const;
 };

@@ -246,6 +246,50 @@ export const saveGlobalCache = async (
   }
 };
 
+/**
+ * Fila de gravação serializada — evita race entre saves paralelos
+ * (ex.: OR e AA finalizando ao mesmo tempo) que poderiam clobberar leituras read-modify-write.
+ */
+let saveQueue: Promise<unknown> = Promise.resolve();
+
+const enqueueSave = <T>(task: () => Promise<T>): Promise<T> => {
+  const next = saveQueue.then(task, task);
+  saveQueue = next.catch(() => undefined);
+  return next;
+};
+
+/**
+ * Atualiza apenas a fatia OpenRouter do cache em disco.
+ * Lê o cache atual, preserva os modelos AA, sobrescreve OR e regrava com timestamp novo.
+ * Serializado contra outras gravações para evitar race read-modify-write.
+ *
+ * @param orModels - Modelos brutos OpenRouter recém-buscados da API
+ * @returns Result com sucesso ou erro
+ */
+export const saveOpenRouterToCache = async (
+  orModels: readonly CachedORModel[],
+): Promise<CacheResult<void>> =>
+  enqueueSave(async () => {
+    const existing = await loadGlobalCacheIgnoreTTL();
+    return saveGlobalCache(orModels, existing?.aaModels ?? []);
+  });
+
+/**
+ * Atualiza apenas a fatia Artificial Analysis do cache em disco.
+ * Lê o cache atual, preserva os modelos OR, sobrescreve AA e regrava com timestamp novo.
+ * Serializado contra outras gravações para evitar race read-modify-write.
+ *
+ * @param aaModels - Modelos brutos Artificial Analysis recém-buscados da API
+ * @returns Result com sucesso ou erro
+ */
+export const saveAAToCache = async (
+  aaModels: readonly CachedAAModel[],
+): Promise<CacheResult<void>> =>
+  enqueueSave(async () => {
+    const existing = await loadGlobalCacheIgnoreTTL();
+    return saveGlobalCache(existing?.openRouterModels ?? [], aaModels);
+  });
+
 // ── Bundled fallback ──────────────────────────────────────────────
 
 /**

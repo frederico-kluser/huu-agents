@@ -14,7 +14,6 @@ import type { EnrichedModel } from '../data/enriched-model.js';
 import { buildEnrichedModels } from '../data/enriched-model.js';
 import { useModels } from '../hooks/use-models.js';
 import { useArtificialAnalysis } from '../hooks/use-artificial-analysis.js';
-import { saveGlobalCache } from '../services/offline-benchmark-cache.js';
 import { EnhancedModelTable } from './enhanced-model-table.js';
 
 // ── Props ───────────────────────────────────────────────────────────
@@ -97,22 +96,15 @@ export const ModelSelector = ({
     return orAge ?? aaAge ?? null;
   }, [modelsState, aaState]);
 
-  // Unified refresh: invalidate both caches, fetch fresh, save to disk
+  // Unified refresh: hooks own their own disk persistence on success
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    const [orOk] = await Promise.all([
+    await Promise.all([
       refreshModels(),
       artificialAnalysisApiKey ? refreshAA() : Promise.resolve(false),
     ]);
-
-    // Save both to disk cache if OR succeeded
-    if (orOk && modelsState.status === 'loaded') {
-      const aaModels = aaState.status === 'loaded' ? [...aaState.models] : [];
-      void saveGlobalCache([], aaModels);
-    }
-
     setRefreshing(false);
-  }, [refreshModels, refreshAA, artificialAnalysisApiKey, modelsState, aaState]);
+  }, [refreshModels, refreshAA, artificialAnalysisApiKey]);
 
   // Loading state
   if (modelsState.status === 'loading') {

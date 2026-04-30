@@ -77,3 +77,16 @@ export type { ColumnDef, SortKey, FilterMode } from './components/table-columns.
 
 export { configureCachePaths, formatCacheAge, isDiskCacheFresh } from './services/offline-benchmark-cache.js';
 export type { CacheConfig, BenchmarkCache } from './services/offline-benchmark-cache.js';
+
+// ── API key resolution & global config ─────────────────────────────
+
+export { resolveApiKeys, clearEnvFileCache } from './services/api-key-resolver.js';
+export type { ResolvedApiKeys, ResolveOptions, ApiKeySource } from './services/api-key-resolver.js';
+
+export {
+  loadGlobalConfig,
+  loadGlobalConfigSync,
+  saveGlobalConfig,
+  getGlobalConfigPath,
+} from './services/global-config.js';
+export type { GlobalConfig } from './services/global-config.js';

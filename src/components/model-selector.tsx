@@ -14,6 +14,7 @@ import type { EnrichedModel } from '../data/enriched-model.js';
 import { buildEnrichedModels } from '../data/enriched-model.js';
 import { useModels } from '../hooks/use-models.js';
 import { useArtificialAnalysis } from '../hooks/use-artificial-analysis.js';
+import { resolveApiKeys } from '../services/api-key-resolver.js';
 import { EnhancedModelTable } from './enhanced-model-table.js';
 
 // ── Props ───────────────────────────────────────────────────────────
@@ -75,8 +76,19 @@ export const ModelSelector = ({
   widthPercent,
   heightPercent,
 }: ModelSelectorProps) => {
-  const { state: modelsState, forceRefresh: refreshModels } = useModels(openRouterApiKey);
-  const { state: aaState, forceRefresh: refreshAA } = useArtificialAnalysis(artificialAnalysisApiKey);
+  // Quando uma key nao vier por prop, resolve via cadeia: .env > process.env > config global.
+  // Permite que consumidores instalem o pacote e nao precisem repetir keys em cada projeto.
+  const resolved = useMemo(
+    () =>
+      resolveApiKeys({
+        openRouterApiKey,
+        artificialAnalysisApiKey,
+      }),
+    [openRouterApiKey, artificialAnalysisApiKey],
+  );
+
+  const { state: modelsState, forceRefresh: refreshModels } = useModels(resolved.openRouterApiKey);
+  const { state: aaState, forceRefresh: refreshAA } = useArtificialAnalysis(resolved.artificialAnalysisApiKey);
   const [refreshing, setRefreshing] = useState(false);
 
   // Enrich OR models with AA benchmarks
@@ -101,10 +113,10 @@ export const ModelSelector = ({
     setRefreshing(true);
     await Promise.all([
       refreshModels(),
-      artificialAnalysisApiKey ? refreshAA() : Promise.resolve(false),
+      resolved.artificialAnalysisApiKey ? refreshAA() : Promise.resolve(false),
     ]);
     setRefreshing(false);
-  }, [refreshModels, refreshAA, artificialAnalysisApiKey]);
+  }, [refreshModels, refreshAA, resolved.artificialAnalysisApiKey]);
 
   // Loading state
   if (modelsState.status === 'loading') {
